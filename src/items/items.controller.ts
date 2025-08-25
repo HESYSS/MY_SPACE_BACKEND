@@ -9,6 +9,7 @@ export class ItemsController {
   // GET /items?status=active&type=flat&city=Kyiv
   @Get()
   async findAll(@Query() query: any) {
+    console.log("Received query:", query);
     return this.itemsService.findAll(query);
   }
 

@@ -11,30 +11,43 @@ export class ItemsService {
     const limit = filters.limit ? parseInt(filters.limit, 10) : 10;
     const skip = (page - 1) * limit;
 
+    const where: any = {};
+    if (filters.status) where.status = filters.status;
+    if (filters.type) where.type = filters.type;
+    if (filters.deal) where.deal = filters.deal;
+
+    if (filters.city) {
+      where.location = {
+        is: {
+          city: { contains: filters.city, mode: "insensitive" },
+        },
+      };
+    }
+
     const items = await this.prisma.item.findMany({
-      where: {
-        status: filters.status,
-        type: filters.type,
-        deal: filters.deal,
-        location: filters.city
-          ? { city: { contains: filters.city, mode: "insensitive" } }
-          : undefined,
-      },
+      where,
       include: {
         location: true,
         prices: true,
         contacts: true,
-        images: true,
+        images: {
+          where: { isActive: true },
+          orderBy: { order: "asc" },
+          take: 1,
+        },
       },
       skip,
       take: limit,
+      orderBy: { updatedAt: "desc" },
     });
 
-    // Возвращаем каждый объект с первой картинкой
     return items.map((item) => ({
       ...item,
-      firstImage: item.images?.length ? item.images[0].url : null,
+      firstImage: item.images?.[0]?.url || null,
+      images: undefined,
     }));
+
+    // возвращаем объект с полем firstImage
   }
 
   async findOne(id: string) {
