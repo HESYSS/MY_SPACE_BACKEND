@@ -1,0 +1,24 @@
+{
+  "sqltools.connections": [
+    {
+      "name": "postgres_crm",
+      "driver": "PostgreSQL",
+      "connectString": "",
+      "server": "127.0.0.1",
+      "port": 5432,
+      "database": "crmdb",
+      "username": "myuser",
+      "password": "mypassword",
+      "ssl": false,
+      "pool": {
+        "max": 10,
+        "idleTimeoutMillis": 10000,
+        "connectionTimeoutMillis": 0
+      },
+      "options": {
+        "statement_timeout": 0,
+        "query_timeout": 0
+      }
+    }
+  ]
+}
