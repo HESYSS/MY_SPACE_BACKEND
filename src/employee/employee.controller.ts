@@ -1,5 +1,5 @@
 // employee.controller.ts
-import { Controller, Post, Body, Get, Delete, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Post, Body, Get, Delete, Param, ParseIntPipe, NotFoundException } from '@nestjs/common';
 import { EmployeeService } from './employee.service';
 import { Employee } from '@prisma/client';
 
@@ -31,6 +31,15 @@ export class EmployeeController {
   @Get()
   async findAllEmployees(): Promise<Employee[]> {
     return this.employeeService.findAllEmployees();
+  }
+
+  @Get(':id')
+  async findEmployeeById(@Param('id', ParseIntPipe) id: number): Promise<Employee> {
+    const employee = await this.employeeService.findEmployeeById(id);
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+    return employee;
   }
 
   @Delete(':id')

@@ -1,5 +1,5 @@
 // employee.service.ts
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Employee } from '@prisma/client';
 import { CreateEmployeeDto } from './dto/CreateEmployee.dto';
@@ -36,6 +36,18 @@ export class EmployeeService {
 
   async findAllEmployees(): Promise<Employee[]> {
     return this.prisma.employee.findMany();
+  }
+
+  async findEmployeeById(id: number): Promise<Employee> {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id },
+    });
+
+    if (!employee) {
+      throw new NotFoundException(`Employee with ID ${id} not found.`);
+    }
+
+    return employee;
   }
 
   async deleteEmployee(id: number): Promise<Employee> {
