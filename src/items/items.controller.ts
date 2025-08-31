@@ -1,0 +1,28 @@
+// src/items/items.controller.ts
+import { Controller, Get, Param, Query } from "@nestjs/common";
+import { ItemsService } from "./items.service";
+
+@Controller("items")
+export class ItemsController {
+  constructor(private readonly itemsService: ItemsService) {}
+
+  // GET /items?status=active&type=flat&city=Kyiv
+  @Get()
+  async findAll(@Query() query: any) {
+    console.log("Received query:", query);
+    return this.itemsService.findAll(query);
+  }
+
+  @Get("coords")
+  async getCoordinates(@Query() query: any) {
+    // query может содержать фильтры: deal, type, city и т.д.
+    return this.itemsService.getCoordinates(query);
+  }
+
+  // GET /items/:id
+  @Get(":id")
+  async findOne(@Param("id") id: string) {
+    console.log("Fetching item with ID:", id);
+    return this.itemsService.findOne(id);
+  }
+}
