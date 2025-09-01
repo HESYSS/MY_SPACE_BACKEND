@@ -28,12 +28,16 @@ export class ItemsService {
       where,
       select: {
         id: true,
+        crmId: true,
         title: true,
         description: true,
         type: true,
         location: {
           select: {
             street: true,
+            city: true,
+            lat: true,
+            lng: true,
           },
         },
         prices: {
@@ -42,13 +46,13 @@ export class ItemsService {
             currency: true,
           },
         },
+        contacts: true,
         images: {
           where: { isActive: true },
           orderBy: { order: "asc" },
           take: 1,
           select: { url: true },
         },
-        // 👇 если комнаты и площадь хранятся в характеристиках
         characteristics: {
           select: {
             key: true,
@@ -69,39 +73,36 @@ export class ItemsService {
 
       return {
         id: String(item.id),
+        crmId: item.crmId,
         title: item.title ?? "",
-        discription: item.description ?? "",
+        description: item.description ?? "",
         prices: item.prices,
         rooms,
         area,
         firstImage: item.images?.[0]?.url || null,
         street: item.location?.street ?? "",
+        city: item.location?.city ?? "",
         type: item.type ?? "",
+        contacts: item.contacts,
+        lat: item.location?.lat ?? null,
+        lng: item.location?.lng ?? null,
       };
     });
   }
 
   async getCoordinates(filters: any) {
-    // фильтры могут быть: deal, type, city, status и т.д.
     const where: any = {};
 
-    if (filters.deal) {
-      where.deal = filters.deal;
-    }
-    if (filters.type) {
-      where.type = filters.type;
-    }
-    if (filters.city) {
-      where.location = { city: filters.city };
-    }
-    if (filters.status) {
-      where.status = filters.status;
-    }
+    if (filters.deal) where.deal = filters.deal;
+    if (filters.type) where.type = filters.type;
+    if (filters.city) where.location = { city: filters.city };
+    if (filters.status) where.status = filters.status;
 
     const items = await this.prisma.item.findMany({
       where,
       select: {
         id: true,
+        crmId: true,
         location: {
           select: {
             lat: true,
@@ -111,19 +112,21 @@ export class ItemsService {
       },
     });
 
-    // возвращаем только id и координаты
     return items
       .filter((i) => i.location?.lat && i.location?.lng)
       .map((i) => ({
-        id: i.id,
+        id: String(i.id),
+        crmId: i.crmId,
         lat: i.location!.lat,
         lng: i.location!.lng,
       }));
   }
 
   async findOne(id: string) {
-    return this.prisma.item.findUnique({
-      where: { id: Number(id) },
+    return this.prisma.item.findFirst({
+      where: {
+        OR: [{ id: Number(id) }, { crmId: id }],
+      },
       include: {
         location: true,
         prices: true,

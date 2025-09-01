@@ -13,6 +13,6 @@
     "sourceMap": true
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist"],
-  "assets": ["src/data/**/*"]
+
+  "exclude": ["node_modules", "dist"]
 }

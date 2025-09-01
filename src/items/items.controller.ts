@@ -22,7 +22,6 @@ export class ItemsController {
   // GET /items/:id
   @Get(":id")
   async findOne(@Param("id") id: string) {
-    console.log("Fetching item with ID:", id);
     return this.itemsService.findOne(id);
   }
 }
