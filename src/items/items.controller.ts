@@ -13,6 +13,12 @@ export class ItemsController {
     return this.itemsService.findAll(query);
   }
 
+  @Get("coords")
+  async getCoordinates(@Query() query: any) {
+    // query может содержать фильтры: deal, type, city и т.д.
+    return this.itemsService.getCoordinates(query);
+  }
+
   // GET /items/:id
   @Get(":id")
   async findOne(@Param("id") id: string) {

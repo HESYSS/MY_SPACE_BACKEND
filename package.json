@@ -6,7 +6,8 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "build": "nest build",
+    "build": "nest build && npm run copy-assets",
+    "copy-assets": "xcopy src\\data dist\\data /E /I /Y",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
@@ -24,20 +25,28 @@
     "prisma:reset": "prisma migrate reset"
   },
   "dependencies": {
+    "@mapbox/mbtiles": "^0.12.1",
+    "@mapbox/vector-tile": "^2.0.4",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.4.20",
     "@prisma/client": "^6.14.0",
     "axios": "^1.11.0",
+    "express": "^5.1.0",
+    "pbf": "^4.0.1",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
     "@nestjs/schematics": "^10.0.0",
     "@nestjs/testing": "^10.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
     "@types/node": "^20.3.1",
     "@types/xml2js": "^0.4.14",
     "@typescript-eslint/eslint-plugin": "^6.0.0",

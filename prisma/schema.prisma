@@ -9,8 +9,8 @@ generator client {
 }
 
 model Item {
-  id              Int              @id @default(autoincrement())
-  crmId           String           @unique
+  id              Int            @id @default(autoincrement())
+  crmId           String         @unique
   status          String?
   title           String?
   description     String?
@@ -24,12 +24,12 @@ model Item {
   createdAt       DateTime?
   updatedAt       DateTime?
 
-  location       Location?
+  location        Location?
   characteristics Characteristic[]
-  prices         Price[]
-  images         Image[]
-  contacts       Contact[]
-  metros         Metro[]
+  prices          Price[]
+  images          Image[]
+  contacts        Contact[]
+  metros          Metro[]
 }
 
 model Location {
@@ -49,12 +49,12 @@ model Location {
 }
 
 model Metro {
-  id      Int    @id @default(autoincrement())
-  itemId  Int
-  name    String
+  id       Int    @id @default(autoincrement())
+  itemId   Int
+  name     String
   distance Int
 
-  item    Item   @relation(fields: [itemId], references: [id])
+  item     Item   @relation(fields: [itemId], references: [id])
 
   @@index([itemId, distance])
 }
@@ -72,33 +72,52 @@ model Characteristic {
 }
 
 model Price {
-  id      Int     @id @default(autoincrement())
-  itemId  Int
-  value   Float
-  currency String @default("USD")
+  id       Int     @id @default(autoincrement())
+  itemId   Int
+  value    Float
+  currency String  @default("USD")
 
-  item    Item    @relation(fields: [itemId], references: [id])
+  item     Item    @relation(fields: [itemId], references: [id])
   @@index([value])
 }
 
 model Image {
-  id      Int    @id @default(autoincrement())
-  itemId  Int
-  url     String
-  order   Int     @default(0)   // порядок отображения
+  id       Int     @id @default(autoincrement())
+  itemId   Int
+  url      String
+  order    Int     @default(0) // порядок отображения
   isActive Boolean @default(true) // видимость для админа
 
-  item    Item   @relation(fields: [itemId], references: [id])
+  item     Item    @relation(fields: [itemId], references: [id])
 
   @@index([itemId, order])
 }
 
 model Contact {
-  id      Int    @id @default(autoincrement())
-  itemId  Int
-  name    String?
-  phone   String?
-  email   String?
+  id     Int     @id @default(autoincrement())
+  itemId Int
+  name   String?
+  phone  String?
+  email  String?
 
-  item    Item   @relation(fields: [itemId], references: [id])
+  item   Item    @relation(fields: [itemId], references: [id])
+}
+
+// schema.prisma
+model Employee {
+  id              Int     @id @default(autoincrement())
+  firstName       String
+  lastName        String
+  position        String
+  experienceYears Int?
+  profile         String?
+  aboutMe         String?
+  firstNameEn     String?
+  lastNameEn      String?
+  positionEn      String?
+  profileEn       String?
+  aboutMeEn       String?
+  isPARTNER       Boolean @default(false)
+  isMANAGER       Boolean @default(false)
+  isACTIVE        Boolean @default(false)
 }
