@@ -103,7 +103,6 @@ model Contact {
   item   Item    @relation(fields: [itemId], references: [id])
 }
 
-// schema.prisma
 model Employee {
   id              Int     @id @default(autoincrement())
   firstName       String
@@ -120,4 +119,31 @@ model Employee {
   isPARTNER       Boolean @default(false)
   isMANAGER       Boolean @default(false)
   isACTIVE        Boolean @default(false)
+}
+
+model Offer {
+  id          Int                 @id @default(autoincrement())
+  clientName  String
+  reason      OfferReason
+  propertyType OfferPropertyType
+  phoneNumber String
+  createdAt   DateTime            @default(now())
+  status      OfferStatus         @default(PENDING)
+}
+
+enum OfferReason {
+  BUYING
+  SELLING
+}
+
+enum OfferPropertyType {
+  RESIDENTIAL
+  COMMERCIAL
+  LAND
+}
+
+enum OfferStatus {
+  PENDING      // Не рассмотрен
+  PROCESSED    // Обработан
+  COMPLETED    // Закончен
 }
