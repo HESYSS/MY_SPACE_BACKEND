@@ -1,7 +1,8 @@
-// employee.controller.ts
-import { Controller, Post, Body, Get, Delete, Param, ParseIntPipe, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Delete, Param, ParseIntPipe, NotFoundException, UseGuards, UnauthorizedException, ForbiddenException, Req } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { EmployeeService } from './employee.service';
 import { Employee } from '@prisma/client';
+import { Request } from 'express'; // Импортируем Request из Express
 
 // Добавьте этот DTO, он будет использоваться и в контроллере, и в сервисе
 // Лучше вынести его в отдельный файл, например, src/dto/create-employee.dto.ts
@@ -19,12 +20,24 @@ export interface CreateEmployeeDto {
   aboutMeEn?: string;
 }
 
+interface CustomRequest extends Request {
+  user: {
+    id: number;
+    username: string;
+    role: string;
+  };
+}
+
 @Controller('employee')
 export class EmployeeController {
   constructor(private readonly employeeService: EmployeeService) {}
 
   @Post('create')
-  async createEmployee(@Body() createEmployeeDto: CreateEmployeeDto) {
+  @UseGuards(AuthGuard('jwt'))
+  async createEmployee(@Body() createEmployeeDto: CreateEmployeeDto, @Req() req: CustomRequest) {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      throw new ForbiddenException('У вас нет прав для выполнения этого действия');
+    }
     return this.employeeService.createEmployee(createEmployeeDto);
   }
 
@@ -43,7 +56,11 @@ export class EmployeeController {
   }
 
   @Delete(':id')
-  async deleteEmployee(@Param('id', ParseIntPipe) id: number): Promise<Employee> {
+  @UseGuards(AuthGuard('jwt'))
+  async deleteEmployee(@Param('id', ParseIntPipe) id: number, @Req() req: CustomRequest) {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      throw new ForbiddenException('У вас нет прав для выполнения этого действия');
+    }
     return this.employeeService.deleteEmployee(id);
   }
 }

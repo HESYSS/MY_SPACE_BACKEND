@@ -1,10 +1,32 @@
 // src/offers/offer.controller.ts
-import { Controller, Post, Get, Patch, Body, Param, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Body,
+  Param,
+  BadRequestException,
+  UseGuards,
+  ForbiddenException,
+  Req,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { OfferService } from './offer.service';
 
 // DTO (Data Transfer Objects) для валидации входящих данных
 import { CreateOfferDto } from './dto/create-offer.dto';
 import { UpdateOfferStatusDto } from './dto/update-offer-status.dto';
+import { Request } from 'express';
+
+// Интерфейс для типизации объекта запроса с данными пользователя
+interface CustomRequest extends Request {
+  user: {
+    id: number;
+    username: string;
+    role: string;
+  };
+}
 
 @Controller('offers')
 export class OfferController {
@@ -16,18 +38,26 @@ export class OfferController {
   }
 
   @Get()
-  async findAll() {
+  @UseGuards(AuthGuard('jwt'))
+  async findAll(@Req() req: CustomRequest) {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      throw new ForbiddenException('У вас нет прав для просмотра офферов.');
+    }
     return this.offerService.getAllOffers();
   }
 
   @Patch(':id/status')
+  @UseGuards(AuthGuard('jwt'))
   async updateStatus(
     @Param('id') id: string,
     @Body() updateStatusDto: UpdateOfferStatusDto,
+    @Req() req: CustomRequest,
   ) {
-    // Преобразуем id из строки в число
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      throw new ForbiddenException('У вас нет прав для изменения статуса оффера.');
+    }
+
     const offerId = parseInt(id, 10);
-    // Проверяем, что id является валидным числом
     if (isNaN(offerId)) {
       throw new BadRequestException('Invalid ID');
     }
