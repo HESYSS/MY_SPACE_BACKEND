@@ -131,6 +131,12 @@ model Offer {
   status      OfferStatus         @default(PENDING)
 }
 
+model SiteImage {
+  id  Int    @id @default(autoincrement())
+  name  String @unique
+  url   String
+}
+
 enum OfferReason {
   BUYING
   SELLING
