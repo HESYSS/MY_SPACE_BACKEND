@@ -8,12 +8,9 @@ export class CrmController {
   @Get("feed")
   async getFeed() {
     console.log("Received request for /crm/feed");
-<<<<<<< HEAD
-    //const data = await this.crmService.syncData();
-    //return data;
-=======
+
     const data = await this.crmService.syncData();
+    console.log("end");
     return data;
->>>>>>> origin/master
   }
 }

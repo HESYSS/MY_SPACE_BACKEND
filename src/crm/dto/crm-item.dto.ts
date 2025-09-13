@@ -19,6 +19,7 @@ export interface CrmItemDto {
     region: string;
     city: string;
     borough?: string;
+    county?: string; // 👈 новое поле
     district?: string;
     street?: string;
     street_type?: string; // 👈 новое поле

@@ -38,6 +38,7 @@ model Location {
   country    String?
   region     String?
   city       String?
+  county     String?
   borough    String?
   district   String?
   street     String?
@@ -60,23 +61,21 @@ model Metro {
 }
 
 model Characteristic {
-  id         Int     @id @default(autoincrement())
-  itemId     Int
-  key        String?
-  value      Float?
-  label      String?
-  extraValue String?
+  id     Int    @id @default(autoincrement())
+  itemId Int
+  key    String?
+  value  String?
+  valueNumeric Float?
 
-  item       Item    @relation(fields: [itemId], references: [id])
+  item   Item   @relation(fields: [itemId], references: [id])
   @@index([itemId, key])
 }
-
 model Price {
   id       Int     @id @default(autoincrement())
   itemId   Int
   value    Float
   currency String  @default("USD")
-
+  priceUsd      Float
   item     Item    @relation(fields: [itemId], references: [id])
   @@index([value])
 }

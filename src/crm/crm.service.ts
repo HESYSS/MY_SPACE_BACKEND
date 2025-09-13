@@ -12,6 +12,60 @@ export class CrmService {
 
   constructor(private prisma: PrismaService) {}
 
+  exchangeRatesCache: {
+    [currency: string]: { rate: number; lastUpdated: number };
+  } = {
+    USD: { rate: 1, lastUpdated: 0 }, // доллар по умолчанию
+    EUR: { rate: 0, lastUpdated: 0 }, // евро будет подтягиваться
+    UAH: { rate: 0, lastUpdated: 0 }, // гривна будет подтягиваться
+  };
+
+  private async updateRates(): Promise<void> {
+    const now = Date.now();
+    // обновляем раз в час
+    for (const currency of ["USD", "EUR", "UAH"]) {
+      if (
+        now - (this.exchangeRatesCache[currency]?.lastUpdated || 0) >
+        60 * 60 * 1000
+      ) {
+        try {
+          const res = await axios.get(
+            `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=${currency}&json`
+          );
+          const rate = res.data?.[0]?.rate;
+          if (rate) {
+            this.exchangeRatesCache[currency] = { rate, lastUpdated: now };
+          }
+        } catch (e: any) {
+          console.error(
+            `Ошибка получения курса ${currency} от НБУ:`,
+            e.message
+          );
+        }
+      }
+    }
+  }
+
+  // конвертирует любую валюту в USD
+  async toUsd(value: number, currency: string): Promise<number> {
+    if (currency === "USD") return Math.round(value * 100) / 100;
+
+    await this.updateRates();
+
+    let result = value;
+
+    if (currency === "UAH") {
+      result = value / this.exchangeRatesCache["USD"].rate; // UAH → USD
+    } else if (currency === "EUR") {
+      const eurRate = this.exchangeRatesCache["EUR"].rate; // EUR → UAH
+      const usdRate = this.exchangeRatesCache["USD"].rate; // USD → UAH
+      result = (value * eurRate) / usdRate; // EUR → USD
+    }
+
+    // округление до двух знаков после запятой
+    return Math.round(result * 100) / 100;
+  }
+
   async syncData(): Promise<void> {
     const response = await axios.get(this.crmUrl);
     const xml = response.data;
@@ -29,7 +83,8 @@ export class CrmService {
 
     for (const raw of items) {
       const dto = this.mapXmlItemToDto(raw);
-
+      const priceUsd = await this.toUsd(dto.price.value, dto.price.currency);
+      console.log(dto.price.currency, priceUsd);
       await this.prisma.item.upsert({
         where: { crmId: dto.id },
         update: {
@@ -53,6 +108,7 @@ export class CrmService {
                     city: dto.location.city,
                     borough: dto.location.borough,
                     district: dto.location.district,
+                    county: dto.location.county || null,
                     street: dto.location.street || null,
                     streetType: dto.location.street_type || null,
                     lat: dto.location.lat,
@@ -72,6 +128,7 @@ export class CrmService {
                 },
               }
             : undefined,
+
           prices: {
             upsert: dto.price
               ? [
@@ -80,10 +137,12 @@ export class CrmService {
                     update: {
                       value: dto.price.value,
                       currency: dto.price.currency,
+                      priceUsd,
                     },
                     create: {
                       value: dto.price.value,
                       currency: dto.price.currency,
+                      priceUsd,
                     },
                   },
                 ]
@@ -115,7 +174,42 @@ export class CrmService {
               create: { url, order: index },
             })),
           },
+          metros: {
+            deleteMany: {}, // очищаем старые
+            create:
+              dto.location.metros?.map((m) => ({
+                name: m.name,
+                distance: m.distance,
+              })) || [],
+          },
+          characteristics: {
+            deleteMany: {},
+            create: [
+              ...Object.entries(dto.characteristics)
+                .filter(
+                  ([key]) =>
+                    key !== "extra" && dto.characteristics[key] !== undefined
+                )
+                .map(([key, value]) => {
+                  const num = Number(value);
+                  return {
+                    key,
+                    value: String(value),
+                    valueNumeric: isNaN(num) ? null : num,
+                  };
+                }),
+              ...(dto.characteristics.extra?.map((e) => {
+                const num = Number(e.value);
+                return {
+                  key: e.label,
+                  value: e.value,
+                  valueNumeric: isNaN(num) ? null : num,
+                };
+              }) || []),
+            ],
+          },
         },
+
         create: {
           crmId: dto.id,
           status: dto.status,
@@ -137,6 +231,7 @@ export class CrmService {
                   region: dto.location.region,
                   city: dto.location.city,
                   borough: dto.location.borough,
+                  county: dto.location.county || null,
                   district: dto.location.district,
                   street: dto.location.street || null,
                   streetType: dto.location.street_type || null,
@@ -145,11 +240,13 @@ export class CrmService {
                 },
               }
             : undefined,
+
           prices: dto.price
             ? {
                 create: {
                   value: dto.price.value,
                   currency: dto.price.currency,
+                  priceUsd,
                 },
               }
             : undefined,
@@ -170,6 +267,42 @@ export class CrmService {
                 })),
               }
             : undefined,
+          metros: dto.location.metros?.length
+            ? {
+                create: dto.location.metros.map((m) => ({
+                  name: m.name,
+                  distance: m.distance,
+                })),
+              }
+            : undefined,
+          characteristics: {
+            create: [
+              // обычные характеристики
+              ...Object.entries(dto.characteristics)
+                .filter(
+                  ([key]) =>
+                    key !== "extra" && dto.characteristics[key] !== undefined
+                )
+                .map(([key, value]) => {
+                  const num = Number(value);
+                  return {
+                    key,
+                    value: String(value),
+                    valueNumeric: isNaN(num) ? null : num,
+                  };
+                }),
+
+              // extra характеристики тоже в key/value
+              ...(dto.characteristics.extra?.map((e) => {
+                const num = Number(e.value);
+                return {
+                  key: e.label,
+                  value: e.value,
+                  valueNumeric: isNaN(num) ? null : num,
+                };
+              }) || []),
+            ],
+          },
         },
       });
     }
@@ -239,6 +372,8 @@ export class CrmService {
         : [item.location.metros.metro]
       : [];
 
+    const county = item.location?.county;
+
     const metros = metroArray.map((m: any) => ({
       name: m._ || "",
       distance: parseInt(m.value || m.$?.value || "0", 10),
@@ -265,6 +400,7 @@ export class CrmService {
         borough: getText(item.location?.borough),
         district: getText(item.location?.district),
         street,
+        county: county ? getText(county) : null,
         street_type: streetType,
         lat: getNumber(item.location?.map_lat),
         lng: getNumber(item.location?.map_lng),

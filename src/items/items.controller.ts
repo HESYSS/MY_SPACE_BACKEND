@@ -10,13 +10,22 @@ export class ItemsController {
   @Get()
   async findAll(@Query() query: any) {
     console.log("Received query:", query);
+
     return this.itemsService.findAll(query);
   }
 
   @Get("coords")
   async getCoordinates(@Query() query: any) {
+    console.log("fvfdd:", query);
     // query может содержать фильтры: deal, type, city и т.д.
     return this.itemsService.getCoordinates(query);
+  }
+
+  @Get("location")
+  async getLocation() {
+    const data = await this.itemsService.getLocation();
+    console.log(data);
+    return data;
   }
 
   // GET /items/:id
