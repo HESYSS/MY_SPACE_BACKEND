@@ -1,17 +1,65 @@
 // src/employee/dto/create-employee.dto.ts
-export interface CreateEmployeeDto {
-  firstName: string;
-  lastName: string;
-  position: string;
+
+import { IsOptional, IsString, IsBoolean, IsNumber } from 'class-validator';
+import { Transform } from 'class-transformer';
+
+export class CreateEmployeeDto {
+  @IsString()
+  firstName!: string;
+
+  @IsString()
+  lastName!: string;
+
+  @IsString()
+  position!: string;
+
+  @IsNumber()
+  @IsOptional()
+  @Transform(({ value }) => (value ? Number(value) : undefined))
   experienceYears?: number;
+
+  @IsString()
+  @IsOptional()
   profile?: string;
+
+  @IsString()
+  @IsOptional()
   aboutMe?: string;
+
+  @IsString()
+  @IsOptional()
   firstNameEn?: string;
+
+  @IsString()
+  @IsOptional()
   lastNameEn?: string;
+
+  @IsString()
+  @IsOptional()
   positionEn?: string;
+
+  @IsString()
+  @IsOptional()
   profileEn?: string;
+
+  @IsString()
+  @IsOptional()
   aboutMeEn?: string;
-  isPARTNER?: boolean;
-  isMANAGER?: boolean;
-  isACTIVE?: boolean;
+
+  // Теперь это булевы значения, преобразованные из строк
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true')
+  isPARTNER!: boolean;
+
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true')
+  isMANAGER!: boolean;
+
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true')
+  isACTIVE!: boolean;
+
+  @IsString()
+  @IsOptional()
+  photoUrl?: string;
 }
