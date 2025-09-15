@@ -4,13 +4,21 @@ import axios from "axios";
 import * as xml2js from "xml2js";
 import { CrmItemDto } from "./dto/crm-item.dto";
 import { PrismaService } from "../prisma/prisma.service";
+import { TranslateService } from "../translate/translate.service";
 
 @Injectable()
 export class CrmService {
   private crmUrl =
     "https://crm-myspace.realtsoft.net/feed/xml?id=3&updates=all";
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private translateService: TranslateService // <--
+  ) {
+    // Запускаем периодическую проверку каждые N секунд
+    this.startAutoTranslate();
+  }
+  private dtoContainer: CrmItemDto[] = [];
 
   exchangeRatesCache: {
     [currency: string]: { rate: number; lastUpdated: number };
@@ -66,6 +74,171 @@ export class CrmService {
     return Math.round(result * 100) / 100;
   }
 
+  private startAutoTranslate() {
+    const interval = 5000; // проверяем каждые 5 секунд
+    setInterval(async () => {
+      if (this.dtoContainer.length === 0) return;
+      console.log("Найдены новые DTO, запускаем перевод...");
+      try {
+        await this.translateAndSave();
+      } catch (err) {
+        console.error("Ошибка при автоматическом переводе:", err);
+      }
+    }, interval);
+  }
+
+  async translateAndSave(): Promise<void> {
+    if (!this.dtoContainer.length) {
+      console.log("Нет данных для перевода");
+      return;
+    }
+
+    for (const dto of this.dtoContainer) {
+      // Проверяем, есть ли что-то для перевода
+      const hasTextToTranslate =
+        dto.title ||
+        dto.description ||
+        dto.deal ||
+        dto.type ||
+        dto.category ||
+        dto.newbuilding_name ||
+        (dto.location &&
+          (dto.location.country ||
+            dto.location.region ||
+            dto.location.city ||
+            dto.location.county ||
+            dto.location.borough ||
+            dto.location.district ||
+            dto.location.street ||
+            dto.location.street_type)) ||
+        (dto.location?.metros?.length ?? 0) > 0 ||
+        (dto.characteristics && Object.keys(dto.characteristics).length > 0);
+
+      if (!hasTextToTranslate) continue;
+
+      // Перевод основных полей
+      const [
+        titleEn,
+        descriptionEn,
+        dealEn,
+        typeEn,
+        categoryEn,
+        newbuildingNameEn,
+      ] = await Promise.all([
+        dto.title ? this.translateService.translateText(dto.title, "en") : "",
+        dto.description
+          ? this.translateService.translateText(dto.description, "en")
+          : "",
+        dto.deal ? this.translateService.translateText(dto.deal, "en") : "",
+        dto.type ? this.translateService.translateText(dto.type, "en") : "",
+        dto.category
+          ? this.translateService.translateText(dto.category, "en")
+          : "",
+        dto.newbuilding_name
+          ? this.translateService.translateText(dto.newbuilding_name, "en")
+          : "",
+      ]);
+
+      // Перевод локации
+      const locationEn: Partial<Record<string, string>> = {};
+      if (dto.location) {
+        const locFields: (keyof typeof dto.location)[] = [
+          "country",
+          "region",
+          "city",
+          "county",
+          "borough",
+          "district",
+          "street",
+          "street_type",
+        ];
+        const mapField = (f: string) =>
+          f === "street_type" ? "streetType" : f;
+
+        await Promise.all(
+          locFields.map(async (f) => {
+            const value = dto.location?.[f];
+            if (typeof value === "string" && value.trim()) {
+              const key = mapField(f) + "En";
+              locationEn[key] = await this.translateService.translateText(
+                value,
+                "en"
+              );
+            }
+          })
+        );
+      }
+
+      // Метро с переводами
+      const metrosWithTranslations = await Promise.all(
+        (dto.location?.metros || []).map(async (m) => ({
+          id: Number(dto.id),
+          nameEn: m.name
+            ? await this.translateService.translateText(m.name, "en")
+            : "",
+        }))
+      );
+
+      // Характеристики с переводами
+      const characteristicsWithTranslations = await Promise.all(
+        [
+          ...Object.entries(dto.characteristics || {})
+            .filter(
+              ([key]) =>
+                key !== "extra" && dto.characteristics[key] !== undefined
+            )
+            .map(([key, value]) => ({ key, value: String(value) })),
+          ...(dto.characteristics?.extra?.map((e) => ({
+            key: e.label,
+            value: e.value,
+          })) || []),
+        ].map(async (c) => ({
+          key: c.key,
+          keyEn: c.key
+            ? await this.translateService.translateText(c.key, "en")
+            : "",
+          valueEn: c.value
+            ? await this.translateService.translateText(c.value, "en")
+            : "",
+        }))
+      );
+
+      // Сохраняем переводы в БД
+      await this.prisma.item.update({
+        where: { crmId: dto.id },
+        data: {
+          titleEn,
+          descriptionEn,
+          dealEn,
+          typeEn,
+          categoryEn,
+          newbuildingNameEn,
+          location: dto.location
+            ? {
+                update: locationEn,
+              }
+            : undefined,
+          metros: {
+            updateMany: metrosWithTranslations.map((m) => ({
+              where: { id: m.id },
+              data: { nameEn: m.nameEn },
+            })),
+          },
+          characteristics: {
+            updateMany: characteristicsWithTranslations.map((c) => ({
+              where: { key: c.key, itemId: Number(dto.id) },
+              data: { keyEn: c.keyEn, valueEn: c.valueEn },
+            })),
+          },
+        },
+      });
+    }
+
+    // Очищаем контейнер после перевода
+    this.dtoContainer = [];
+    console.log("Переводы сохранены");
+  }
+
   async syncData(): Promise<void> {
     const response = await axios.get(this.crmUrl);
     const xml = response.data;
@@ -83,8 +256,9 @@ export class CrmService {
 
     for (const raw of items) {
       const dto = this.mapXmlItemToDto(raw);
+      this.dtoContainer.push(dto);
       const priceUsd = await this.toUsd(dto.price.value, dto.price.currency);
-      console.log(dto.price.currency, priceUsd);
+
       await this.prisma.item.upsert({
         where: { crmId: dto.id },
         update: {

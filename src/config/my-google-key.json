@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "vital-form-471811-t4",
+  "private_key_id": "982b66c4f4e27d2920124a18b60d39273bf2344d",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCYPAb8rxRDA/Aq\nrAMWB9CAfi0E6LO8txl9oT5F8yrXz5Gfi/nOzAFU9Bc5vuY5iFqitpKnxXIhDr0G\niBtcbvUhAoViw/wE/ZTu9pszmJ8J54/yBRhCvS6+HXQ2aZVCLuVqiUKTK869yct0\nX+9eyIp62mg86BM8DiOn6h7B2osZj0seoq/rm+evlJ/bORtmkujg9jVxCIgRp9FW\n9gh6T6ZTo59XtlStYUHztJ+A1YqEQjY3iS5IrAvyiaoJIqxSfYqvvJxzhcE2hr4C\nfaNYRLKMdlBi2EqFxk3tkNEysiap/vDKW7Ur+u24oj0++EEipg98Qkqju14QCfpL\nRx28yyJfAgMBAAECggEAE01/3ff90TYwHzEFXnyU1vNowO0X++SZklY+KlTCyMTU\neaRK2LUBsY8WXNI+/eozV9tfgsS54RrYeU9hF299nHcQiQKXCN5LIqED8om2bLqU\nWW3aSCgVw7HCDl4v40mapE9i23yxWluPyndER5fqWy5+C27/yrHI7/Md0vBjin9w\ngDQMjhWz78S3FwvCTHge+g+IzH5cnqyK4StpoBR5+maT8cbQ0WMuipZ1BHPpHfZZ\njLfOE7RyzHI6BZ9j5sy9QkDP0jARwLRrOm0mGDQ9ntJFVWFvleMuwNcFqi3FzP40\nx/621SHaL4Rt/q9NnUPqOUOkFPvaEADdDeo8v5NdFQKBgQDTaLlshVNP+7cLNI5g\n1zCSNiYOg6FL+c7mocW+s/HZoSrkMNHKo4L9LxBKSIsg2opvMpfqQ0bM2hn8JZ1s\nNMWkyKpauaVJl3oIffGXcf8PVksH1LSiGtrFZT55wMXdVIcL+UVQOL/4FtFW4KpJ\nnSzX44Xtg19eglyJqL93K6ZnVQKBgQC4WBpLc5BLgK9+KLupczqn45xAfwcNW6dF\nF/9wn2COFgHDyufZGR9uuALa/HIF6gncqgfbzRW6irast7SgI/Ev0E2IMmLtCyP7\nBylm+BqgVElA9Ohpg/UxLHz2dsL4Tbheie3Kgnyilf4uM4uzJLadmQmrCHxvvGnv\naXjBcQN64wKBgQCcWrm4ryqc3xfTq70Zlk2P9YhT97pVjJ4fKMotbrySLoagWhLv\nAduhESvFJL3xQHBeKVb9pWA5pZzORauWGbmLU/XaP68lLGjO2wbQ8TioyTOYyRIH\nSkE++NAqEA7G0PtIOcWvvSkNfSK6VFLdOueti9LDhQQFy/hQv4NLyfa6OQKBgG3h\nVgsTXzciBXkVnoZqgNQB/+kRzopPz2yH2WKwHUWUKIkkMP5e0zWTyV/uiais0CQP\n1Y9Wt1TxyeE5vxiVU/ZEG3LLVdwlf9Tpd+xAht56Xw+w67e5SDV/Zx0hvSV0bikr\n3emPzeq7rT6syuCFSbS2u+SOsl2H2T0ziR8E1iYxAoGAbKIGub+nWR0B/EFTLPWH\nZqpy9XJ4pHTlLWh/OOBnUnLI1LYuHjFBbMQ9aeqfbi2LJkIltCll/TEzAQomXbul\nurk1Qnpgi2klUz8vGVA/f8mpvxDK5RQ3wEEbKGtd3jWr9iJ74GTkBAx4+PtP08jl\nSxdMnK0bl/qf6s0h7soVoSo=\n-----END PRIVATE KEY-----\n",
+  "client_email": "crm-translator@vital-form-471811-t4.iam.gserviceaccount.com",
+  "client_id": "110449118159310413314",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/crm-translator%40vital-form-471811-t4.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
