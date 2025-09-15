@@ -1,22 +1,34 @@
-// employee.controller.ts
-import { Controller, Post, Body, Get, Delete, Param, ParseIntPipe, NotFoundException } from '@nestjs/common';
+// src/employee/employee.controller.ts
+
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Delete,
+  Param,
+  ParseIntPipe,
+  NotFoundException,
+  UseGuards,
+  ForbiddenException,
+  Req,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { EmployeeService } from './employee.service';
 import { Employee } from '@prisma/client';
+import { Request } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { CreateEmployeeDto } from './dto/CreateEmployee.dto'; // <-- ИМПОРТИРУЕМ ПРАВИЛЬНЫЙ КЛАСС DTO
 
-// Добавьте этот DTO, он будет использоваться и в контроллере, и в сервисе
-// Лучше вынести его в отдельный файл, например, src/dto/create-employee.dto.ts
-export interface CreateEmployeeDto {
-  firstName: string;
-  lastName: string;
-  position: string;
-  experienceYears?: number;
-  profile?: string;
-  aboutMe?: string;
-  firstNameEn?: string;
-  lastNameEn?: string;
-  positionEn?: string;
-  profileEn?: string;
-  aboutMeEn?: string;
+interface CustomRequest extends Request {
+  user: {
+    id: number;
+    username: string;
+    role: string;
+  };
 }
 
 @Controller('employee')
@@ -24,8 +36,24 @@ export class EmployeeController {
   constructor(private readonly employeeService: EmployeeService) {}
 
   @Post('create')
-  async createEmployee(@Body() createEmployeeDto: CreateEmployeeDto) {
-    return this.employeeService.createEmployee(createEmployeeDto);
+  @UseGuards(AuthGuard('jwt'))
+  @UseInterceptors(FileInterceptor('file'))
+  async createEmployee(
+    @Body() createEmployeeDto: CreateEmployeeDto,
+    @Req() req: CustomRequest,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      throw new ForbiddenException('У вас нет прав для выполнения этого действия');
+    }
+
+    // Проверка наличия файла
+    if (!file) {
+      throw new BadRequestException('Employee photo file is required.');
+    }
+
+    // Передаем DTO и файл в сервис
+    return this.employeeService.createEmployee(createEmployeeDto, file);
   }
 
   @Get()
@@ -43,7 +71,11 @@ export class EmployeeController {
   }
 
   @Delete(':id')
-  async deleteEmployee(@Param('id', ParseIntPipe) id: number): Promise<Employee> {
+  @UseGuards(AuthGuard('jwt'))
+  async deleteEmployee(@Param('id', ParseIntPipe) id: number, @Req() req: CustomRequest) {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      throw new ForbiddenException('У вас нет прав для выполнения этого действия');
+    }
     return this.employeeService.deleteEmployee(id);
   }
 }
