@@ -11,6 +11,7 @@ export class ItemsService {
   ) {}
 
   async findAll(filters: any) {
+    const lang = filters.lang || "ua"; // по умолчанию украинский
     const page = filters.page ? parseInt(filters.page, 10) : 1;
     const limit = filters.limit ? parseInt(filters.limit, 10) : 10;
     const skip = (page - 1) * limit;
@@ -54,6 +55,9 @@ export class ItemsService {
         const streets = String(filters.street).split(",");
         locationConditions.push({
           street: { in: streets },
+        });
+        locationConditions.push({
+          streetEn: { in: streets },
         });
       }
 
@@ -122,6 +126,7 @@ export class ItemsService {
       const buildings = String(filters.newbuildings).split(",");
       itemConditions.push({
         newbuildingName: { in: buildings.map((b) => b.trim()) },
+        newbuildingNameEn: { in: buildings.map((b) => b.trim()) },
       });
     }
 
@@ -222,56 +227,36 @@ export class ItemsService {
       where,
       skip,
       take: limit,
-      orderBy: { updatedAt: "desc" }, // можно сделать параметризованную сортировку
-      select: {
-        id: true,
-        crmId: true,
-        title: true,
-        description: true,
-        type: true,
-        deal: true,
-        updatedAt: true,
-        category: true,
-        isOutOfCity: true,
-        isNewBuilding: true,
-        newbuildingName: true,
-        location: {
-          select: {
-            street: true,
-            city: true,
-            district: true,
-            lat: true,
-            lng: true,
-          },
-        },
-        prices: { select: { value: true, currency: true, priceUsd: true } },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        location: true,
+        characteristics: true,
+        prices: true,
+        images: true,
         contacts: true,
-        images: {
-          where: { isActive: true },
-          orderBy: { order: "asc" },
-          take: 1,
-          select: { url: true },
-        },
-        characteristics: {
-          select: { key: true, value: true, valueNumeric: true },
-        },
-        metros: { select: { name: true, distance: true } },
+        metros: true,
       },
     });
 
     return {
       items: items.map((item) => {
+        // выбираем поля в зависимости от языка
+        const getField = (
+          field?: string | null,
+          fieldEn?: string | null
+        ): string => (lang === "en" ? (fieldEn ?? field ?? "") : (field ?? ""));
+
         const rooms =
           item.characteristics.find((c) => c.key === "room_count")?.value ??
           null;
         const area =
           item.characteristics.find((c) => c.key === "area_total")?.value ??
           null;
+
         const prices = item.prices.map((p) => {
           if (requestedCurrency === "USD") {
             return { value: p.priceUsd ?? p.value, currency: "USD" };
           } else if (requestedCurrency === "UAH") {
-            // конвертируем обратно в гривны
             const usdRate = this.crmService.exchangeRatesCache["USD"].rate;
             return {
               value:
@@ -282,24 +267,35 @@ export class ItemsService {
             return { value: p.value, currency: p.currency };
           }
         });
+
         return {
           id: String(item.id),
           crmId: item.crmId,
-          title: item.title ?? "",
-          description: item.description ?? "",
+          title: getField(item.title, item.titleEn),
+          description: getField(item.description, item.descriptionEn),
+          type: getField(item.type, item.typeEn),
+          deal: getField(item.deal, item.dealEn),
+          category: getField(item.category, item.categoryEn),
+          newbuildingName: getField(
+            item.newbuildingName,
+            item.newbuildingNameEn
+          ),
+          street: getField(item.location?.street, item.location?.streetEn),
+          district: getField(
+            item.location?.district,
+            item.location?.districtEn
+          ),
+          city: getField(item.location?.city, item.location?.cityEn),
           prices,
           rooms,
           area,
           firstImage: item.images?.[0]?.url || null,
-          street: item.location?.street ?? "",
-          district: item.location?.district ?? "",
-          city: item.location?.city ?? "",
-          type: item.type ?? "",
           contacts: item.contacts,
           lat: item.location?.lat ?? null,
           lng: item.location?.lng ?? null,
-          newbuildingName: item.newbuildingName ?? "",
-          metros: item.metros.map((m) => m.name),
+          metros: item.metros.map((m) =>
+            lang === "en" ? (m.nameEn ?? m.name) : m.name
+          ),
           updatedAt: item.updatedAt ?? null,
         };
       }),
@@ -347,6 +343,9 @@ export class ItemsService {
         const streets = String(filters.street).split(",");
         locationConditions.push({
           street: { in: streets },
+        });
+        locationConditions.push({
+          streetEn: { in: streets },
         });
       }
 
@@ -415,6 +414,9 @@ export class ItemsService {
       const buildings = String(filters.newbuildings).split(",");
       itemConditions.push({
         newbuildingName: { in: buildings.map((b) => b.trim()) },
+      });
+      itemConditions.push({
+        newbuildingNameEn: { in: buildings.map((b) => b.trim()) },
       });
     }
 
@@ -583,10 +585,15 @@ export class ItemsService {
     };
   }
 
-  async getLocation() {
+  async getLocation(filters?: { lang?: string }) {
+    const lang = filters?.lang || "ua"; // по умолчанию украинский
+    console.log("lang:", lang);
+    const getField = (field?: string | null, fieldEn?: string | null) =>
+      lang === "en" ? (fieldEn ?? field ?? "") : (field ?? "");
+
     // Улицы по Киеву
     const kyivStreets = await this.prisma.location.findMany({
-      select: { street: true },
+      select: { street: true, streetEn: true },
       where: {
         street: { not: null },
         item: { isOutOfCity: false },
@@ -597,7 +604,7 @@ export class ItemsService {
 
     // Улицы по области
     const regionStreets = await this.prisma.location.findMany({
-      select: { street: true },
+      select: { street: true, streetEn: true },
       where: {
         street: { not: null },
         item: { isOutOfCity: true },
@@ -608,7 +615,7 @@ export class ItemsService {
 
     // ЖК по Киеву
     const kyivNewbuildings = await this.prisma.item.findMany({
-      select: { newbuildingName: true },
+      select: { newbuildingName: true, newbuildingNameEn: true },
       where: { newbuildingName: { not: null }, isOutOfCity: false },
       distinct: ["newbuildingName"],
       orderBy: { newbuildingName: "asc" },
@@ -616,13 +623,15 @@ export class ItemsService {
 
     // ЖК по области
     const regionNewbuildings = await this.prisma.item.findMany({
-      select: { newbuildingName: true },
+      select: { newbuildingName: true, newbuildingNameEn: true },
       where: { newbuildingName: { not: null }, isOutOfCity: true },
       distinct: ["newbuildingName"],
       orderBy: { newbuildingName: "asc" },
     });
+
+    // Направления по области
     const regionDirections = await this.prisma.location.findMany({
-      select: { county: true },
+      select: { county: true, countyEn: true },
       where: {
         county: { not: null },
         item: { isOutOfCity: true },
@@ -630,15 +639,20 @@ export class ItemsService {
       distinct: ["county"],
       orderBy: { county: "asc" },
     });
+
     return {
       kyiv: {
-        streets: kyivStreets.map((s) => s.street),
-        newbuildings: kyivNewbuildings.map((n) => n.newbuildingName),
+        streets: kyivStreets.map((s) => getField(s.street, s.streetEn)),
+        newbuildings: kyivNewbuildings.map((n) =>
+          getField(n.newbuildingName, n.newbuildingNameEn)
+        ),
       },
       region: {
-        streets: regionStreets.map((s) => s.street),
-        newbuildings: regionNewbuildings.map((n) => n.newbuildingName),
-        directions: regionDirections.map((d) => d.county),
+        streets: regionStreets.map((s) => getField(s.street, s.streetEn)),
+        newbuildings: regionNewbuildings.map((n) =>
+          getField(n.newbuildingName, n.newbuildingNameEn)
+        ),
+        directions: regionDirections.map((d) => getField(d.county, d.countyEn)),
       },
     };
   }
