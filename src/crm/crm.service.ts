@@ -74,27 +74,52 @@ export class CrmService {
     return Math.round(result * 100) / 100;
   }
 
-  private startAutoTranslate() {
-    const interval = 5000; // проверяем каждые 5 секунд
-    setInterval(async () => {
-      if (this.dtoContainer.length === 0) return;
+  public pushDto(dto: CrmItemDto | CrmItemDto[]) {
+    if (Array.isArray(dto)) {
+      this.dtoContainer.push(...dto);
+    } else {
+      this.dtoContainer.push(dto);
+    }
+    console.log(
+      `В очередь добавлено DTO. Всего в очереди: ${this.dtoContainer.length}`
+    );
+  }
+
+  private async startAutoTranslate() {
+    const interval = 5000; // пауза между проверками
+
+    const checkAndTranslate = async () => {
+      if (this.dtoContainer.length === 0) {
+        console.log("Нет DTO для перевода, ждём...");
+        setTimeout(checkAndTranslate, interval);
+        return;
+      }
+
       console.log("Найдены новые DTO, запускаем перевод...");
+
       try {
         await this.translateAndSave();
+        console.log("Переводы сохранены");
       } catch (err) {
         console.error("Ошибка при автоматическом переводе:", err);
       }
-    }, interval);
+
+      // ждём перед следующей проверкой
+      setTimeout(checkAndTranslate, interval);
+    };
+
+    // запускаем первый раз
+    checkAndTranslate();
   }
 
-  async translateAndSave(): Promise<void> {
+  private async translateAndSave(): Promise<void> {
     if (!this.dtoContainer.length) {
       console.log("Нет данных для перевода");
       return;
     }
 
     for (const dto of this.dtoContainer) {
-      // Проверяем, есть ли что-то для перевода
+      // Проверяем, есть ли что переводить
       const hasTextToTranslate =
         dto.title ||
         dto.description ||
@@ -169,7 +194,7 @@ export class CrmService {
         );
       }
 
-      // Метро с переводами
+      // Метро
       const metrosWithTranslations = await Promise.all(
         (dto.location?.metros || []).map(async (m) => ({
           id: Number(dto.id),
@@ -179,7 +204,7 @@ export class CrmService {
         }))
       );
 
-      // Характеристики с переводами
+      // Характеристики
       const characteristicsWithTranslations = await Promise.all(
         [
           ...Object.entries(dto.characteristics || {})
@@ -203,7 +228,7 @@ export class CrmService {
         }))
       );
 
-      // Сохраняем переводы в БД
+      // Сохраняем переводы
       await this.prisma.item.update({
         where: { crmId: dto.id },
         data: {
@@ -234,9 +259,8 @@ export class CrmService {
       });
     }
 
-    // Очищаем контейнер после перевода
+    // очищаем контейнер после перевода
     this.dtoContainer = [];
-    console.log("Переводы сохранены");
   }
 
   async syncData(): Promise<void> {
@@ -256,7 +280,7 @@ export class CrmService {
 
     for (const raw of items) {
       const dto = this.mapXmlItemToDto(raw);
-      this.dtoContainer.push(dto);
+      this.pushDto(dto);
       const priceUsd = await this.toUsd(dto.price.value, dto.price.currency);
 
       await this.prisma.item.upsert({
