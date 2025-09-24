@@ -15,6 +15,7 @@ export class ItemsController {
 
   @Get("coords")
   async getCoordinates(@Query() query: any) {
+    console.log("Получение координат с параметрами:", query);
     // query может содержать фильтры: deal, type, city и т.д.
     return this.itemsService.getCoordinates(query);
   }
@@ -28,7 +29,7 @@ export class ItemsController {
   }
   // GET /items/:id
   @Get(":id")
-  async findOne(@Param("id") id: string) {
-    return this.itemsService.findOne(id);
+  async findOne(@Param("id") id: string, @Query("lang") lang: string) {
+    return this.itemsService.findOne(id, lang);
   }
 }

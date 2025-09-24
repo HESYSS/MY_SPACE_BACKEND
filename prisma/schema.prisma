@@ -21,11 +21,9 @@ model Item {
 
   // Сделка / тип / категория
   deal            String?
-  dealEn          String?
   type            String?
   typeEn          String?
   category        String?
-  categoryEn      String?
 
   // Новостройка
   newbuildingName   String?
@@ -53,11 +51,8 @@ model Location {
 
   // Локация
   country    String?
-  countryEn  String?
   region     String?
-  regionEn   String?
   city       String?
-  cityEn     String?
   county     String?
   countyEn   String?
   borough    String?
@@ -67,7 +62,6 @@ model Location {
   street     String?
   streetEn   String?
   streetType String?
-  streetTypeEn String?
 
   lat        Float?
   lng        Float?
@@ -80,7 +74,6 @@ model Metro {
   itemId   Int
 
   name     String
-  nameEn   String?   // перевод станции метро
   distance Int
 
   item     Item   @relation(fields: [itemId], references: [id])
@@ -93,7 +86,6 @@ model Characteristic {
   id           Int    @id @default(autoincrement())
   itemId       Int
   key          String?
-  keyEn        String?    // перевод характеристики
   value        String?
   valueEn      String?    // перевод значения (если нужно, например "с ремонтом")
   valueNumeric Float?
