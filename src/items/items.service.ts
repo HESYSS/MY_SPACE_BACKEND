@@ -2,6 +2,18 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CrmService } from "../crm/crm.service";
+import { Item } from "@prisma/client";
+
+// Создаем тип, который соответствует полям, выбираемым для админки
+type AdminItem = {
+  id: number;
+  crmId: string;
+  title: string | null;
+  titleEn: string | null;
+  status: string | null;
+  isNewBuilding: boolean | null;
+  isOutOfCity: boolean | null;
+};
 
 @Injectable()
 export class ItemsService {
@@ -655,5 +667,26 @@ export class ItemsService {
         directions: regionDirections.map((d) => getField(d.county, d.countyEn)),
       },
     };
+  }
+
+  /**
+   * Возвращает список всех объектов недвижимости для админки.
+   * @returns Массив объектов AdminItem.
+   */
+  async getAllItemsForAdmin(): Promise<AdminItem[]> {
+    return this.prisma.item.findMany({
+      select: {
+        id: true,
+        crmId: true,
+        title: true,
+        titleEn: true,
+        status: true,
+        isNewBuilding: true,
+        isOutOfCity: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
   }
 }
