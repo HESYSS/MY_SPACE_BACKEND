@@ -274,8 +274,8 @@ export class ItemsService {
           title: getField(item.title, item.titleEn),
           description: getField(item.description, item.descriptionEn),
           type: getField(item.type, item.typeEn),
-          deal: getField(item.deal, item.dealEn),
-          category: getField(item.category, item.categoryEn),
+          deal: item.deal,
+          category: item.category,
           newbuildingName: getField(
             item.newbuildingName,
             item.newbuildingNameEn
@@ -285,17 +285,13 @@ export class ItemsService {
             item.location?.district,
             item.location?.districtEn
           ),
-          city: getField(item.location?.city, item.location?.cityEn),
+          city: item.location?.city,
           prices,
           rooms,
           area,
           firstImage: item.images?.[0]?.url || null,
           contacts: item.contacts,
-          lat: item.location?.lat ?? null,
-          lng: item.location?.lng ?? null,
-          metros: item.metros.map((m) =>
-            lang === "en" ? (m.nameEn ?? m.name) : m.name
-          ),
+          metros: item.metros.map((m) => m.name),
           updatedAt: item.updatedAt ?? null,
         };
       }),
@@ -303,6 +299,10 @@ export class ItemsService {
     };
   }
   async getCoordinates(filters: any) {
+    const lang = filters.lang || "ua"; // по умолчанию украинский
+    const page = filters.page ? parseInt(filters.page, 10) : 1;
+    const limit = filters.limit ? parseInt(filters.limit, 10) : 10;
+    const skip = (page - 1) * limit;
     const requestedCurrency = filters.currency || "USD";
     const where: any = {};
 
@@ -414,8 +414,6 @@ export class ItemsService {
       const buildings = String(filters.newbuildings).split(",");
       itemConditions.push({
         newbuildingName: { in: buildings.map((b) => b.trim()) },
-      });
-      itemConditions.push({
         newbuildingNameEn: { in: buildings.map((b) => b.trim()) },
       });
     }
@@ -510,7 +508,7 @@ export class ItemsService {
         characteristics: { some: cond },
       }));
     }
-    console.log("хуй");
+    console.log("хуйня где:", where);
     // --- Query ---s
     const items = await this.prisma.item.findMany({
       where,
@@ -529,13 +527,11 @@ export class ItemsService {
     }));
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, lang: string = "ua") {
     const item = await this.prisma.item.findFirst({
-      where: {
-        OR: [{ id: Number(id) }, { crmId: id }],
-      },
+      where: { OR: [{ id: Number(id) }] },
       include: {
-        location: true,
+        location: true, // предполагаем, что location имеет поля name и nameEn
         prices: true,
         contacts: true,
         images: true,
@@ -547,13 +543,13 @@ export class ItemsService {
 
     // Сопоставление ключей с украинскими названиями
     const charMap: Record<string, string> = {
+      room_count: "Кількість кімнат",
+      area_total: "Загальна площа",
       total_floors: "Загальна кількість поверхів",
       floor: "Поверх",
-      area_total: "Загальна площа",
       area_kitchen: "Площа кухні",
       area_living: "Площа житлова",
       area_land: "Площа землі",
-      room_count: "Кількість кімнат",
       Ремонт: "Ремонт",
       "Тип будівлі": "Тип будівлі",
       "Рік вводу в експлуатацію": "Рік вводу в експлуатацію",
@@ -567,19 +563,54 @@ export class ItemsService {
 
     for (const [dbKey, ukrLabel] of Object.entries(charMap)) {
       const char = item.characteristics.find((c) => c.key === dbKey);
-      characteristics[ukrLabel] = char ? char.value : null;
+      characteristics[ukrLabel] = char
+        ? lang === "ua"
+          ? char.value
+          : (char.valueEn ?? char.value)
+        : null;
+    }
+
+    // Локализуем location
+    let location = null;
+    if (item.location) {
+      location = {
+        country: item.location.country ?? "",
+        region: item.location.region ?? "",
+        city: item.location.city ?? "",
+        county:
+          lang === "ua"
+            ? item.location.county
+            : (item.location.countyEn ?? item.location.county),
+        borough:
+          lang === "ua"
+            ? item.location.borough
+            : (item.location.boroughEn ?? item.location.borough),
+        district:
+          lang === "ua"
+            ? item.location.district
+            : (item.location.districtEn ?? item.location.district),
+        street:
+          lang === "ua"
+            ? item.location.street
+            : (item.location.streetEn ?? item.location.street),
+        streetType: item.location.streetType ?? "",
+        lat: item.location.lat ?? null,
+        lng: item.location.lng ?? null,
+      };
     }
 
     return {
       id: String(item.id),
       crmId: item.crmId,
-      title: item.title ?? "",
-      description: item.description ?? "",
+      title: lang === "ua" ? item.title : (item.titleEn ?? item.title),
+      description:
+        lang === "ua"
+          ? item.description
+          : (item.descriptionEn ?? item.description),
       type: item.type ?? "",
       deal: item.deal ?? "",
-      location: item.location ?? null,
+      location,
       prices: item.prices ?? [],
-      contacts: item.contacts ?? [],
       images: item.images ?? [],
       characteristics,
     };

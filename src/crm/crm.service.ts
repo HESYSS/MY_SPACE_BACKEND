@@ -80,9 +80,6 @@ export class CrmService {
     } else {
       this.dtoContainer.push(dto);
     }
-    console.log(
-      `В очередь добавлено DTO. Всего в очереди: ${this.dtoContainer.length}`
-    );
   }
 
   private async startAutoTranslate() {
@@ -90,7 +87,6 @@ export class CrmService {
 
     const checkAndTranslate = async () => {
       if (this.dtoContainer.length === 0) {
-        console.log("Нет DTO для перевода, ждём...");
         setTimeout(checkAndTranslate, interval);
         return;
       }
@@ -142,40 +138,30 @@ export class CrmService {
       if (!hasTextToTranslate) continue;
 
       // Перевод основных полей
-      const [
-        titleEn,
-        descriptionEn,
-        dealEn,
-        typeEn,
-        categoryEn,
-        newbuildingNameEn,
-      ] = await Promise.all([
-        dto.title ? this.translateService.translateText(dto.title, "en") : "",
-        dto.description
-          ? this.translateService.translateText(dto.description, "en")
-          : "",
-        dto.deal ? this.translateService.translateText(dto.deal, "en") : "",
-        dto.type ? this.translateService.translateText(dto.type, "en") : "",
-        dto.category
-          ? this.translateService.translateText(dto.category, "en")
-          : "",
-        dto.newbuilding_name
-          ? this.translateService.translateText(dto.newbuilding_name, "en")
-          : "",
-      ]);
+      const [titleEn, descriptionEn, typeEn, newbuildingNameEn] =
+        await Promise.all([
+          dto.title ? this.translateService.translateText(dto.title, "en") : "",
+          dto.description
+            ? this.translateService.translateText(dto.description, "en")
+            : "",
+          dto.deal ? this.translateService.translateText(dto.deal, "en") : "",
+          dto.type ? this.translateService.translateText(dto.type, "en") : "",
+          dto.category
+            ? this.translateService.translateText(dto.category, "en")
+            : "",
+          dto.newbuilding_name
+            ? this.translateService.translateText(dto.newbuilding_name, "en")
+            : "",
+        ]);
 
       // Перевод локации
       const locationEn: Partial<Record<string, string>> = {};
       if (dto.location) {
         const locFields: (keyof typeof dto.location)[] = [
-          "country",
-          "region",
-          "city",
           "county",
           "borough",
           "district",
           "street",
-          "street_type",
         ];
         const mapField = (f: string) =>
           f === "street_type" ? "streetType" : f;
@@ -195,14 +181,6 @@ export class CrmService {
       }
 
       // Метро
-      const metrosWithTranslations = await Promise.all(
-        (dto.location?.metros || []).map(async (m) => ({
-          id: Number(dto.id),
-          nameEn: m.name
-            ? await this.translateService.translateText(m.name, "en")
-            : "",
-        }))
-      );
 
       // Характеристики
       const characteristicsWithTranslations = await Promise.all(
@@ -219,9 +197,7 @@ export class CrmService {
           })) || []),
         ].map(async (c) => ({
           key: c.key,
-          keyEn: c.key
-            ? await this.translateService.translateText(c.key, "en")
-            : "",
+
           valueEn: c.value
             ? await this.translateService.translateText(c.value, "en")
             : "",
@@ -234,29 +210,23 @@ export class CrmService {
         data: {
           titleEn,
           descriptionEn,
-          dealEn,
           typeEn,
-          categoryEn,
           newbuildingNameEn,
           location: dto.location
             ? {
                 update: locationEn,
               }
             : undefined,
-          metros: {
-            updateMany: metrosWithTranslations.map((m) => ({
-              where: { id: m.id },
-              data: { nameEn: m.nameEn },
-            })),
-          },
+
           characteristics: {
             updateMany: characteristicsWithTranslations.map((c) => ({
               where: { key: c.key, itemId: Number(dto.id) },
-              data: { keyEn: c.keyEn, valueEn: c.valueEn },
+              data: { valueEn: c.valueEn },
             })),
           },
         },
       });
+      console.log(`Переводы для CRM ID ${dto.id} сохранены.`);
     }
 
     // очищаем контейнер после перевода
@@ -540,12 +510,6 @@ export class CrmService {
     const streetType = getText(item.location?.street_type);
     const city = getText(item.location?.city);
 
-    const isOutOfCity =
-      !street ||
-      !streetType ||
-      city.toLowerCase().startsWith("с.") ||
-      city.toLowerCase() !== "київ";
-
     const characteristics: Record<string, any> = {};
     for (const key in item) {
       if (
@@ -571,7 +535,7 @@ export class CrmService {
       : [];
 
     const county = item.location?.county;
-
+    const isOutOfCity = !county;
     const metros = metroArray.map((m: any) => ({
       name: m._ || "",
       distance: parseInt(m.value || m.$?.value || "0", 10),
