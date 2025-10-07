@@ -1,8 +1,22 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+// src/image/image.service.ts
+import {
+  Injectable,
+  BadRequestException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { SiteImage } from '@prisma/client';
+import { Image, Prisma, SiteImage } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * Тип для обновления порядка изображений.
+ */
+export type ImageOrderUpdate = {
+  id: number;
+  order: number;
+};
 
 @Injectable()
 export class ImageService {
@@ -19,10 +33,18 @@ export class ImageService {
       R2_PUBLIC_URL,
     } = process.env;
 
-    if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ENDPOINT || !R2_BUCKET_NAME || !R2_PUBLIC_URL) {
-      throw new InternalServerErrorException('Missing Cloudflare R2 environment variables.');
+    if (
+      !R2_ACCESS_KEY_ID ||
+      !R2_SECRET_ACCESS_KEY ||
+      !R2_ENDPOINT ||
+      !R2_BUCKET_NAME ||
+      !R2_PUBLIC_URL
+    ) {
+      throw new InternalServerErrorException(
+        'Missing Cloudflare R2 environment variables.',
+      );
     }
-    
+
     this.bucketName = R2_BUCKET_NAME;
     this.publicUrl = R2_PUBLIC_URL;
 
@@ -43,7 +65,7 @@ export class ImageService {
    */
   async uploadImage(file: Express.Multer.File): Promise<SiteImage> {
     const fileExtension = file.originalname.split('.').pop();
-    const fileName = `${uuidv4()}.${fileExtension}`; 
+    const fileName = `${uuidv4()}.${fileExtension}`;
 
     const existingImage = await this.prisma.siteImage.findUnique({
       where: { name: file.originalname },
@@ -116,14 +138,14 @@ export class ImageService {
     try {
       await this.s3Client.send(deleteCommand);
     } catch (error) {
-      console.error('Failed to delete image from R2:', error);
+      console.warn('Failed to delete image from R2:', error);
       throw new BadRequestException('Failed to delete image from storage.');
     }
-    
+
     return this.prisma.siteImage.delete({ where: { id } });
   }
 
-/**
+  /**
    * Обновляет существующее изображение, загружая новый файл и удаляя старый.
    * @param id - ID изображения для обновления.
    * @param file - Новый файл изображения.
@@ -174,5 +196,69 @@ export class ImageService {
         url: newPublicUrl, // Обновляем только URL, имя остается прежним
       },
     });
+  }
+
+  // --- Новые методы для управления изображениями объектов (модель Image) ---
+
+  /**
+   * Получает все изображения, привязанные к конкретному объекту, отсортированные по порядку.
+   * @param itemId ID объекта недвижимости.
+   * @returns Массив объектов Image.
+   */
+  async getImagesByItemId(itemId: number): Promise<Image[]> {
+    const item = await this.prisma.item.findUnique({
+      where: { id: itemId },
+      include: {
+        images: {
+          orderBy: { order: 'asc' },
+        },
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException(`Item with ID ${itemId} not found`);
+    }
+
+    return item.images;
+  }
+
+  /**
+   * Обновляет статус активности (isActive) изображения объекта.
+   * @param imageId ID изображения.
+   * @param isActive Новое значение активности (true/false).
+   * @returns Обновленный объект Image.
+   */
+  async updateItemImageActiveStatus(
+    imageId: number,
+    isActive: boolean,
+  ): Promise<Image> {
+    const image = await this.prisma.image.findUnique({
+      where: { id: imageId },
+    });
+
+    if (!image) {
+      throw new NotFoundException(`Image with ID ${imageId} not found`);
+    }
+
+    return this.prisma.image.update({
+      where: { id: imageId },
+      data: { isActive },
+    });
+  }
+
+  /**
+   * Обновляет порядок (order) для нескольких изображений объекта.
+   * @param updates Массив объектов, содержащих id изображения и новый порядок.
+   * @returns Массив обновленных объектов Image.
+   */
+  async updateItemImageOrder(updates: ImageOrderUpdate[]): Promise<Image[]> {
+    const transaction = updates.map((update) =>
+      this.prisma.image.update({
+        where: { id: update.id },
+        data: { order: update.order },
+      }),
+    );
+
+    return this.prisma.$transaction(transaction);
   }
 }

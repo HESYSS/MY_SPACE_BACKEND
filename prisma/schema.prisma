@@ -13,23 +13,19 @@ model Item {
   crmId           String         @unique
   status          String?
 
-  // Тексты
   title           String?
-  titleEn         String?   // EN перевод
+  titleEn         String?
   description     String?
   descriptionEn   String?
 
-  // Сделка / тип / категория
   deal            String?
   type            String?
   typeEn          String?
   category        String?
 
-  // Новостройка
   newbuildingName   String?
   newbuildingNameEn String?
 
-  // Прочее
   isNewBuilding   Boolean?
   isOutOfCity     Boolean?
   article         String?
@@ -39,11 +35,30 @@ model Item {
 
   location        Location?
   characteristics Characteristic[]
-  prices          Price[]
+
+  // 🔹 связь один-к-одному
+  prices           Price?         @relation("ItemToPrice") 
+
   images          Image[]
   contacts        Contact[]
   metros          Metro[]
+
+  slug            String?   @unique
 }
+
+model Price {
+  id       Int     @id @default(autoincrement())
+  value    Float
+  currency String  @default("USD")
+  priceUsd Float
+
+  // 🔹 связь один-к-одному
+  itemId   Int     @unique
+  item     Item    @relation("ItemToPrice", fields: [itemId], references: [id])
+  
+  @@index([value])
+}
+
 
 model Location {
   id         Int     @id @default(autoincrement())
@@ -93,15 +108,7 @@ model Characteristic {
   item         Item   @relation(fields: [itemId], references: [id])
   @@index([itemId, key])
 }
-model Price {
-  id       Int     @id @default(autoincrement())
-  itemId   Int
-  value    Float
-  currency String  @default("USD")
-  priceUsd      Float
-  item     Item    @relation(fields: [itemId], references: [id])
-  @@index([value])
-}
+
 
 model Image {
   id       Int     @id @default(autoincrement())
