@@ -12,7 +12,7 @@ async function bootstrap() {
     cors({
       origin: [
         "http://localhost:3000",
-        "https://fde17a32753e9f47eeec92f4df7ebc51.serveo.net",
+        "https://9069b836b9a6da51002286682818f9d3.serveo.net",
       ],
       methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     })

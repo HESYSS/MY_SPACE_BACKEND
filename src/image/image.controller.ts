@@ -1,9 +1,44 @@
-import { Express } from 'express';
-import { Controller, Post, Get, Param, Body, UseInterceptors, UploadedFile, BadRequestException, Delete, ParseIntPipe, Patch, UseGuards, ForbiddenException, Req } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { AuthGuard } from '@nestjs/passport';
-import { ImageService } from './image.service';
-import { Request } from 'express';
+import {
+  Express
+} from 'express';
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  Body,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  Delete,
+  ParseIntPipe,
+  Patch,
+  UseGuards,
+  ForbiddenException,
+  Req,
+  Put,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import {
+  FileInterceptor
+} from '@nestjs/platform-express';
+import {
+  AuthGuard
+} from '@nestjs/passport';
+import {
+  ImageService
+} from './image.service';
+import {
+  Request
+} from 'express';
+import {
+  Image
+} from '@prisma/client';
+import {
+  UpdateImageActiveStatusDto,
+  UpdateImageOrderDto
+} from './dto/image.dto';
 
 interface CustomRequest extends Request {
   user: {
@@ -71,5 +106,55 @@ export class ImageController {
       throw new BadRequestException('No file provided for update.');
     }
     return this.imageService.updateImage(id, file);
+  }
+
+  // --- НОВЫЕ ЭНДПОИНТЫ ДЛЯ ИЗОБРАЖЕНИЙ ОБЪЕКТОВ НЕДВИЖИМОСТИ ---
+
+  /**
+   * Получает все изображения для конкретного объекта недвижимости по его ID.
+   * Роут: GET /images/item/:itemId
+   */
+  @Get('item/:itemId')
+  async getItemImages(@Param('itemId', ParseIntPipe) itemId: number): Promise < Image[] > {
+    return this.imageService.getImagesByItemId(itemId);
+  }
+
+  /**
+   * Обновляет статус активности (isActive) для одного изображения объекта.
+   * Роут: PUT /images/item/:imageId/active
+   */
+  @Put('item/:imageId/active')
+  @UseGuards(AuthGuard('jwt'))
+  async updateItemImageActiveStatus(
+    @Param('imageId', ParseIntPipe) imageId: number,
+    @Body() updateDto: UpdateImageActiveStatusDto,
+    @Req() req: CustomRequest,
+  ): Promise < Image > {
+    // Проверяем, имеет ли пользователь нужную роль
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      throw new ForbiddenException('У вас нет прав для изменения статуса изображения.');
+    }
+    return this.imageService.updateItemImageActiveStatus(
+      imageId,
+      updateDto.isActive,
+    );
+  }
+
+  /**
+   * Обновляет порядок (order) для нескольких изображений объекта.
+   * Роут: PUT /images/item/order
+   */
+  @Put('item/order')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthGuard('jwt'))
+  async updateItemImageOrder(
+    @Body() updateDto: UpdateImageOrderDto,
+    @Req() req: CustomRequest,
+  ): Promise < Image[] > {
+    // Проверяем, имеет ли пользователь нужную роль
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      throw new ForbiddenException('У вас нет прав для изменения порядка изображений.');
+    }
+    return this.imageService.updateItemImageOrder(updateDto.updates);
   }
 }

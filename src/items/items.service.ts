@@ -2,6 +2,18 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CrmService } from "../crm/crm.service";
+import { Item } from "@prisma/client";
+
+// Создаем тип, который соответствует полям, выбираемым для админки
+type AdminItem = {
+  id: number;
+  crmId: string;
+  title: string | null;
+  titleEn: string | null;
+  status: string | null;
+  isNewBuilding: boolean | null;
+  isOutOfCity: boolean | null;
+};
 
 @Injectable()
 export class ItemsService {
@@ -29,7 +41,7 @@ export class ItemsService {
       };
     }
     if (filters.isOutOfCity !== undefined) {
-      where.isOutOfCity = filters.isOutOfCity === "true";
+      where.isOutOfCity = filters.isOutOfCity === "false";
     }
     if (filters.isNewBuilding !== undefined) {
       where.isNewBuilding = filters.isNewBuilding === "true";
@@ -38,7 +50,6 @@ export class ItemsService {
     // --- Location ---
     const itemConditions: any[] = [];
 
-    // --- Location ---
     if (filters.borough || filters.street || filters.city || filters.district) {
       const locationConditions: any[] = [];
 
@@ -53,19 +64,13 @@ export class ItemsService {
 
       if (filters.street) {
         const streets = String(filters.street).split(",");
-        locationConditions.push({
-          street: { in: streets },
-        });
-        locationConditions.push({
-          streetEn: { in: streets },
-        });
+        locationConditions.push({ street: { in: streets } });
+        locationConditions.push({ streetEn: { in: streets } });
       }
 
       if (filters.city) {
         const cities = String(filters.city).split(",");
-        locationConditions.push({
-          city: { in: cities },
-        });
+        locationConditions.push({ city: { in: cities } });
       }
 
       if (filters.district) {
@@ -126,7 +131,6 @@ export class ItemsService {
       const buildings = String(filters.newbuildings).split(",");
       itemConditions.push({
         newbuildingName: { in: buildings.map((b) => b.trim()) },
-        newbuildingNameEn: { in: buildings.map((b) => b.trim()) },
       });
     }
 
@@ -153,8 +157,7 @@ export class ItemsService {
       const priceWhere: any = {};
       if (priceMin !== undefined) priceWhere.gte = priceMin;
       if (priceMax !== undefined) priceWhere.lte = priceMax;
-      console.log(priceMax, priceMin);
-      where.prices = { some: { priceUsd: priceWhere } }; // или valueUsd, если у тебя есть отдельное поле
+      where.prices = { is: { priceUsd: priceWhere } };
     }
 
     const charConditions: any[] = [];
@@ -220,14 +223,32 @@ export class ItemsService {
         characteristics: { some: cond },
       }));
     }
-    console.log("where");
-    console.log("where:", where);
+
+    // --- SORTING ---
+    let orderBy: any = { updatedAt: "desc" }; // дефолт: новые сверху
+    if (filters.sort) {
+      switch (filters.sort) {
+        case "newest":
+          orderBy = { updatedAt: "desc" };
+          break;
+        case "oldest":
+          orderBy = { updatedAt: "asc" };
+          break;
+        case "price_asc":
+          orderBy = { prices: { priceUsd: "asc" } };
+          break;
+        case "price_desc":
+          orderBy = { prices: { priceUsd: "desc" } };
+          break;
+      }
+    }
+
     // --- Query ---
     const items = await this.prisma.item.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { updatedAt: "desc" },
+      orderBy,
       include: {
         location: true,
         characteristics: true,
@@ -240,7 +261,6 @@ export class ItemsService {
 
     return {
       items: items.map((item) => {
-        // выбираем поля в зависимости от языка
         const getField = (
           field?: string | null,
           fieldEn?: string | null
@@ -253,21 +273,30 @@ export class ItemsService {
           item.characteristics.find((c) => c.key === "area_total")?.value ??
           null;
 
-        const prices = item.prices.map((p) => {
-          if (requestedCurrency === "USD") {
-            return { value: p.priceUsd ?? p.value, currency: "USD" };
-          } else if (requestedCurrency === "UAH") {
-            const usdRate = this.crmService.exchangeRatesCache["USD"].rate;
-            return {
-              value:
-                Math.round(((p.priceUsd ?? p.value) * usdRate) / 1000) * 1000,
-              currency: "UAH",
-            };
-          } else {
-            return { value: p.value, currency: p.currency };
-          }
-        });
-
+        const prices = item.prices
+          ? [
+              requestedCurrency === "USD"
+                ? {
+                    value: item.prices.priceUsd ?? item.prices.value,
+                    currency: "USD",
+                  }
+                : requestedCurrency === "UAH"
+                  ? {
+                      value:
+                        Math.round(
+                          ((item.prices.priceUsd ?? item.prices.value) *
+                            this.crmService.exchangeRatesCache["USD"].rate) /
+                            1000
+                        ) * 1000,
+                      currency: "UAH",
+                    }
+                  : {
+                      value: item.prices.value,
+                      currency: item.prices.currency,
+                    },
+            ]
+          : [];
+        console.log(prices);
         return {
           id: String(item.id),
           crmId: item.crmId,
@@ -293,11 +322,13 @@ export class ItemsService {
           contacts: item.contacts,
           metros: item.metros.map((m) => m.name),
           updatedAt: item.updatedAt ?? null,
+          slug: item.slug,
         };
       }),
       total: await this.prisma.item.count({ where }),
     };
   }
+
   async getCoordinates(filters: any) {
     const lang = filters.lang || "ua"; // по умолчанию украинский
     const page = filters.page ? parseInt(filters.page, 10) : 1;
@@ -317,7 +348,7 @@ export class ItemsService {
       };
     }
     if (filters.isOutOfCity !== undefined) {
-      where.isOutOfCity = filters.isOutOfCity === "true";
+      where.isOutOfCity = filters.isOutOfCity === "false";
     }
     if (filters.isNewBuilding !== undefined) {
       where.isNewBuilding = filters.isNewBuilding === "true";
@@ -442,7 +473,7 @@ export class ItemsService {
       if (priceMin !== undefined) priceWhere.gte = priceMin;
       if (priceMax !== undefined) priceWhere.lte = priceMax;
       console.log(priceMax, priceMin);
-      where.prices = { some: { priceUsd: priceWhere } }; // или valueUsd, если у тебя есть отдельное поле
+      where.prices = { is: { priceUsd: priceWhere } }; // или valueUsd, если у тебя есть отдельное поле
     }
 
     const charConditions: any[] = [];
@@ -529,9 +560,9 @@ export class ItemsService {
 
   async findOne(id: string, lang: string = "ua") {
     const item = await this.prisma.item.findFirst({
-      where: { OR: [{ id: Number(id) }] },
+      where: { OR: [{ slug: id }] },
       include: {
-        location: true, // предполагаем, что location имеет поля name и nameEn
+        location: true,
         prices: true,
         contacts: true,
         images: true,
@@ -541,36 +572,40 @@ export class ItemsService {
 
     if (!item) return null;
 
-    // Сопоставление ключей с украинскими названиями
-    const charMap: Record<string, string> = {
-      room_count: "Кількість кімнат",
-      area_total: "Загальна площа",
-      total_floors: "Загальна кількість поверхів",
-      floor: "Поверх",
-      area_kitchen: "Площа кухні",
-      area_living: "Площа житлова",
-      area_land: "Площа землі",
-      Ремонт: "Ремонт",
-      "Тип будівлі": "Тип будівлі",
-      "Рік вводу в експлуатацію": "Рік вводу в експлуатацію",
-      Будинок: "Будинок",
-      Напрямок: "Напрямок",
-      "Посилання на відео": "Посилання на відео",
-      поверх: "Поверх",
+    // Карта ключей для украинского и английского
+    const charMap: Record<string, { ua: string; en: string }> = {
+      room_count: { ua: "Кількість кімнат", en: "Rooms" },
+      area_total: { ua: "Загальна площа", en: "Total area" },
+      total_floors: { ua: "Загальна кількість поверхів", en: "Total floors" },
+      floor: { ua: "Поверх", en: "Floor" },
+      area_kitchen: { ua: "Площа кухні", en: "Kitchen area" },
+      area_living: { ua: "Площа житлова", en: "Living area" },
+      area_land: { ua: "Площа землі", en: "Land area" },
+      Ремонт: { ua: "Ремонт", en: "Renovation" },
+      "Тип будівлі": { ua: "Тип будівлі", en: "Building type" },
+      "Рік вводу в експлуатацію": {
+        ua: "Рік вводу в експлуатацію",
+        en: "Commissioned year",
+      },
+      Будинок: { ua: "Будинок", en: "Building" },
+      Напрямок: { ua: "Напрямок", en: "Direction" },
+      "Посилання на відео": { ua: "Посилання на відео", en: "Video link" },
+      поверх: { ua: "Поверх", en: "Floor" },
     };
 
     const characteristics: Record<string, any> = {};
 
-    for (const [dbKey, ukrLabel] of Object.entries(charMap)) {
+    for (const [dbKey, labels] of Object.entries(charMap)) {
       const char = item.characteristics.find((c) => c.key === dbKey);
-      characteristics[ukrLabel] = char
-        ? lang === "ua"
-          ? char.value
-          : (char.valueEn ?? char.value)
-        : null;
+
+      if (lang === "ua") {
+        characteristics[labels.ua] = char ? char.value : null;
+      } else {
+        characteristics[labels.en] = char ? (char.valueEn ?? char.value) : null;
+      }
     }
 
-    // Локализуем location
+    // Локализация location
     let location = null;
     if (item.location) {
       location = {
@@ -607,15 +642,16 @@ export class ItemsService {
         lang === "ua"
           ? item.description
           : (item.descriptionEn ?? item.description),
-      type: item.type ?? "",
+      type: lang === "ua" ? item.type : (item.typeEn ?? item.type),
       deal: item.deal ?? "",
       location,
       prices: item.prices ?? [],
       images: item.images ?? [],
       characteristics,
+      contacts: item.contacts ?? [],
+      article: item.article,
     };
   }
-
   async getLocation(filters?: { lang?: string }) {
     const lang = filters?.lang || "ua"; // по умолчанию украинский
     console.log("lang:", lang);
@@ -627,7 +663,7 @@ export class ItemsService {
       select: { street: true, streetEn: true },
       where: {
         street: { not: null },
-        item: { isOutOfCity: false },
+        item: { isOutOfCity: true },
       },
       distinct: ["street"],
       orderBy: { street: "asc" },
@@ -638,7 +674,7 @@ export class ItemsService {
       select: { street: true, streetEn: true },
       where: {
         street: { not: null },
-        item: { isOutOfCity: true },
+        item: { isOutOfCity: false },
       },
       distinct: ["street"],
       orderBy: { street: "asc" },
@@ -647,7 +683,7 @@ export class ItemsService {
     // ЖК по Киеву
     const kyivNewbuildings = await this.prisma.item.findMany({
       select: { newbuildingName: true, newbuildingNameEn: true },
-      where: { newbuildingName: { not: null }, isOutOfCity: false },
+      where: { newbuildingName: { not: null }, isOutOfCity: true },
       distinct: ["newbuildingName"],
       orderBy: { newbuildingName: "asc" },
     });
@@ -655,7 +691,7 @@ export class ItemsService {
     // ЖК по области
     const regionNewbuildings = await this.prisma.item.findMany({
       select: { newbuildingName: true, newbuildingNameEn: true },
-      where: { newbuildingName: { not: null }, isOutOfCity: true },
+      where: { newbuildingName: { not: null }, isOutOfCity: false },
       distinct: ["newbuildingName"],
       orderBy: { newbuildingName: "asc" },
     });
@@ -686,5 +722,26 @@ export class ItemsService {
         directions: regionDirections.map((d) => getField(d.county, d.countyEn)),
       },
     };
+  }
+
+  /**
+   * Возвращает список всех объектов недвижимости для админки.
+   * @returns Массив объектов AdminItem.
+   */
+  async getAllItemsForAdmin(): Promise<AdminItem[]> {
+    return this.prisma.item.findMany({
+      select: {
+        id: true,
+        crmId: true,
+        title: true,
+        titleEn: true,
+        status: true,
+        isNewBuilding: true,
+        isOutOfCity: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
   }
 }

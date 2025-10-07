@@ -144,11 +144,8 @@ export class CrmService {
           dto.description
             ? this.translateService.translateText(dto.description, "en")
             : "",
-          dto.deal ? this.translateService.translateText(dto.deal, "en") : "",
           dto.type ? this.translateService.translateText(dto.type, "en") : "",
-          dto.category
-            ? this.translateService.translateText(dto.category, "en")
-            : "",
+
           dto.newbuilding_name
             ? this.translateService.translateText(dto.newbuilding_name, "en")
             : "",
@@ -250,7 +247,7 @@ export class CrmService {
 
     for (const raw of items) {
       const dto = this.mapXmlItemToDto(raw);
-      this.pushDto(dto);
+      //this.pushDto(dto);
       const priceUsd = await this.toUsd(dto.price.value, dto.price.currency);
 
       await this.prisma.item.upsert({
@@ -297,25 +294,22 @@ export class CrmService {
               }
             : undefined,
 
-          prices: {
-            upsert: dto.price
-              ? [
-                  {
-                    where: { id: 0 }, // пока нет ID, можно оставить пустым или использовать create вместо upsert
-                    update: {
-                      value: dto.price.value,
-                      currency: dto.price.currency,
-                      priceUsd,
-                    },
-                    create: {
-                      value: dto.price.value,
-                      currency: dto.price.currency,
-                      priceUsd,
-                    },
+          prices: dto.price
+            ? {
+                upsert: {
+                  update: {
+                    value: dto.price.value,
+                    currency: dto.price.currency,
+                    priceUsd,
                   },
-                ]
-              : [],
-          },
+                  create: {
+                    value: dto.price.value,
+                    currency: dto.price.currency,
+                    priceUsd,
+                  },
+                },
+              }
+            : undefined,
           contacts: {
             upsert: dto.contact
               ? [
