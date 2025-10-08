@@ -1,4 +1,3 @@
-// src/items/items.service.ts
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CrmService } from "../crm/crm.service";
@@ -23,33 +22,88 @@ export class ItemsService {
   ) {}
 
   async findAll(filters: any) {
+    // === ИСПРАВЛЕНИЕ ОШИБКИ ПОИСКА (ДОБАВЛЕНО) ===
+    // Если запрос пришел с 'q' (глобальный поиск), используем его как 'search'
+    if (filters.q) {
+      filters.search = filters.q;
+    }
+    // =============================================
+
     const lang = filters.lang || "ua"; // по умолчанию украинский
     const page = filters.page ? parseInt(filters.page, 10) : 1;
     const limit = filters.limit ? parseInt(filters.limit, 10) : 10;
     const skip = (page - 1) * limit;
     const requestedCurrency = filters.currency || "USD";
+    
+    // Используем массив для всех AND-условий, чтобы управлять фильтрами
+    const andConditions: any[] = [];
     const where: any = {};
 
-    // --- Item ---
-    if (filters.status) where.status = filters.status;
-    if (filters.type) where.type = filters.type;
-    if (filters.deal) where.deal = filters.deal;
+
+    // --- Item (Базовые AND-условия) ---
+    // Собираем базовые фильтры, которые всегда применяются через AND
+    const baseFilters: any = {};
+
+    if (filters.status) baseFilters.status = filters.status;
+    if (filters.type) baseFilters.type = filters.type;
+    if (filters.deal) baseFilters.deal = filters.deal;
     if (filters.category) {
-      where.category = {
+      baseFilters.category = {
         contains: filters.category,
         mode: "insensitive",
       };
     }
     if (filters.isOutOfCity !== undefined) {
-      where.isOutOfCity = filters.isOutOfCity === "false";
+      baseFilters.isOutOfCity = filters.isOutOfCity === "false";
     }
     if (filters.isNewBuilding !== undefined) {
-      where.isNewBuilding = filters.isNewBuilding === "true";
+      baseFilters.isNewBuilding = filters.isNewBuilding === "true";
     }
 
-    // --- Location ---
+    // Добавляем базовые фильтры в AND-условия, если они есть
+    const filteredBaseFilters = Object.fromEntries(
+        Object.entries(baseFilters).filter(([, value]) => value !== undefined)
+    );
+    if (Object.keys(filteredBaseFilters).length > 0) {
+        andConditions.push(filteredBaseFilters);
+    }
+    
+
+    // --- Условия, которые объединяются через OR (включая поиск и локацию) ---
     const itemConditions: any[] = [];
 
+    // --- Global Search (text) ---
+    if (filters.search) {
+      const searchTerm = filters.search.trim();
+      const searchClauses: any[] = [
+        // Поиск по заголовкам
+        { title: { contains: searchTerm, mode: "insensitive" } },
+        { titleEn: { contains: searchTerm, mode: "insensitive" } },
+        // Поиск по описанию
+        { description: { contains: searchTerm, mode: "insensitive" } },
+        { descriptionEn: { contains: searchTerm, mode: "insensitive" } },
+        // Поиск по названию ЖК
+        { newbuildingName: { contains: searchTerm, mode: "insensitive" } },
+        { newbuildingNameEn: { contains: searchTerm, mode: "insensitive" } },
+        // Поиск по локации (улица, район, город)
+        {
+          location: {
+            is: {
+              OR: [
+                { street: { contains: searchTerm, mode: "insensitive" } },
+                { streetEn: { contains: searchTerm, mode: "insensitive" } },
+                { district: { contains: searchTerm, mode: "insensitive" } },
+                { districtEn: { contains: searchTerm, mode: "insensitive" } },
+                { city: { contains: searchTerm, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
+      ];
+      itemConditions.push({ OR: searchClauses }); // Оборачиваем searchClauses в OR, чтобы поиск был по ЛЮБОМУ из полей
+    }
+
+    // --- Location (borough, street, city, district) ---
     if (filters.borough || filters.street || filters.city || filters.district) {
       const locationConditions: any[] = [];
 
@@ -129,17 +183,20 @@ export class ItemsService {
     // --- Newbuildings ---
     if (filters.newbuildings) {
       const buildings = String(filters.newbuildings).split(",");
-      itemConditions.push({
-        newbuildingName: { in: buildings.map((b) => b.trim()) },
-      });
+      itemConditions.push(
+        { newbuildingName: { in: buildings.map((b) => b.trim()) } },
+        { newbuildingNameEn: { in: buildings.map((b) => b.trim()) } }
+      );
     }
 
-    // --- объединяем через OR ---
+    // --- ✅ ИСПРАВЛЕНИЕ: Объединяем OR-условия с AND-условиями ---
+    // Добавляем OR-условия в общий массив AND-условий, если они есть.
     if (itemConditions.length > 0) {
-      where.OR = itemConditions;
+        andConditions.push({ OR: itemConditions });
     }
 
-    // --- Price ---
+
+    // --- Price (AND-условие) ---
     if (filters["prices.value_min"] || filters["prices.value_max"]) {
       const priceMin = filters["prices.value_min"]
         ? await this.crmService.toUsd(
@@ -157,12 +214,13 @@ export class ItemsService {
       const priceWhere: any = {};
       if (priceMin !== undefined) priceWhere.gte = priceMin;
       if (priceMax !== undefined) priceWhere.lte = priceMax;
-      where.prices = { is: { priceUsd: priceWhere } };
+      
+      andConditions.push({ prices: { is: { priceUsd: priceWhere } } }); // Добавляем в общий AND
     }
 
     const charConditions: any[] = [];
 
-    // --- диапазоны ---
+    // --- диапазоны (AND-условия) ---
     if (
       filters["characteristics.floor_min"] ||
       filters["characteristics.floor_max"]
@@ -197,7 +255,7 @@ export class ItemsService {
       charConditions.push(cond);
     }
 
-    // --- ремонт ---
+    // --- ремонт (AND-условие) ---
     if (filters["characteristics.renovation"]) {
       const renovations = String(filters["characteristics.renovation"]).split(
         ","
@@ -208,7 +266,7 @@ export class ItemsService {
       });
     }
 
-    // --- комнаты ---
+    // --- комнаты (AND-условие) ---
     if (filters["characteristics.room_count"]) {
       const values = String(filters["characteristics.room_count"]).split(",");
       charConditions.push({
@@ -217,12 +275,20 @@ export class ItemsService {
       });
     }
 
-    // --- итог ---
+    // --- итог характеристики (AND-условие) ---
     if (charConditions.length > 0) {
-      where.AND = charConditions.map((cond) => ({
-        characteristics: { some: cond },
-      }));
+      andConditions.push(
+        ...charConditions.map((cond) => ({
+          characteristics: { some: cond },
+        }))
+      );
     }
+    
+    // --- ✅ Применяем все собранные AND-условия к where ---
+    if (andConditions.length > 0) {
+        where.AND = andConditions;
+    }
+
 
     // --- SORTING ---
     let orderBy: any = { updatedAt: "desc" }; // дефолт: новые сверху
@@ -259,6 +325,9 @@ export class ItemsService {
       },
     });
 
+    // ... (остальная часть функции findAll без изменений)
+// ...
+// (возвращаемый объект)
     return {
       items: items.map((item) => {
         const getField = (
@@ -330,34 +399,86 @@ export class ItemsService {
   }
 
   async getCoordinates(filters: any) {
+    // === ИСПРАВЛЕНИЕ ОШИБКИ ПОИСКА (ДОБАВЛЕНО) ===
+    // Если запрос пришел с 'q' (глобальный поиск), используем его как 'search'
+    if (filters.q) {
+      filters.search = filters.q;
+    }
+    // =============================================
+
     const lang = filters.lang || "ua"; // по умолчанию украинский
     const page = filters.page ? parseInt(filters.page, 10) : 1;
     const limit = filters.limit ? parseInt(filters.limit, 10) : 10;
     const skip = (page - 1) * limit;
     const requestedCurrency = filters.currency || "USD";
+
+    // Используем массив для всех AND-условий, чтобы управлять фильтрами
+    const andConditions: any[] = [];
     const where: any = {};
 
-    // --- Item ---
-    if (filters.status) where.status = filters.status;
-    if (filters.type) where.type = filters.type;
-    if (filters.deal) where.deal = filters.deal;
+    // --- Item (Базовые AND-условия) ---
+    // Собираем базовые фильтры, которые всегда применяются через AND
+    const baseFilters: any = {};
+    
+    if (filters.status) baseFilters.status = filters.status;
+    if (filters.type) baseFilters.type = filters.type;
+    if (filters.deal) baseFilters.deal = filters.deal;
     if (filters.category) {
-      where.category = {
+      baseFilters.category = {
         contains: filters.category,
         mode: "insensitive",
       };
     }
     if (filters.isOutOfCity !== undefined) {
-      where.isOutOfCity = filters.isOutOfCity === "false";
+      baseFilters.isOutOfCity = filters.isOutOfCity === "false";
     }
     if (filters.isNewBuilding !== undefined) {
-      where.isNewBuilding = filters.isNewBuilding === "true";
+      baseFilters.isNewBuilding = filters.isNewBuilding === "true";
     }
-
-    // --- Location ---
+    
+    // Добавляем базовые фильтры в AND-условия, если они есть
+    const filteredBaseFilters = Object.fromEntries(
+        Object.entries(baseFilters).filter(([, value]) => value !== undefined)
+    );
+    if (Object.keys(filteredBaseFilters).length > 0) {
+        andConditions.push(filteredBaseFilters);
+    }
+    
+    // --- Условия, которые объединяются через OR (включая поиск и локацию) ---
     const itemConditions: any[] = [];
 
-    // --- Location ---
+    // --- Global Search (text) ---
+    if (filters.search) {
+      const searchTerm = filters.search.trim();
+      const searchClauses: any[] = [
+        // Поиск по заголовкам
+        { title: { contains: searchTerm, mode: "insensitive" } },
+        { titleEn: { contains: searchTerm, mode: "insensitive" } },
+        // Поиск по описанию
+        { description: { contains: searchTerm, mode: "insensitive" } },
+        { descriptionEn: { contains: searchTerm, mode: "insensitive" } },
+        // Поиск по названию ЖК
+        { newbuildingName: { contains: searchTerm, mode: "insensitive" } },
+        { newbuildingNameEn: { contains: searchTerm, mode: "insensitive" } },
+        // Поиск по локации (улица, район, город)
+        {
+          location: {
+            is: {
+              OR: [
+                { street: { contains: searchTerm, mode: "insensitive" } },
+                { streetEn: { contains: searchTerm, mode: "insensitive" } },
+                { district: { contains: searchTerm, mode: "insensitive" } },
+                { districtEn: { contains: searchTerm, mode: "insensitive" } },
+                { city: { contains: searchTerm, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
+      ];
+      itemConditions.push({ OR: searchClauses }); // Оборачиваем searchClauses в OR
+    }
+
+    // --- Location (borough, street, city, district) ---
     if (filters.borough || filters.street || filters.city || filters.district) {
       const locationConditions: any[] = [];
 
@@ -443,18 +564,18 @@ export class ItemsService {
     // --- Newbuildings ---
     if (filters.newbuildings) {
       const buildings = String(filters.newbuildings).split(",");
-      itemConditions.push({
-        newbuildingName: { in: buildings.map((b) => b.trim()) },
-        newbuildingNameEn: { in: buildings.map((b) => b.trim()) },
-      });
+      itemConditions.push(
+        { newbuildingName: { in: buildings.map((b) => b.trim()) } },
+        { newbuildingNameEn: { in: buildings.map((b) => b.trim()) } }
+      );
     }
-
-    // --- объединяем через OR ---
+    
+    // --- ✅ ИСПРАВЛЕНИЕ: Объединяем OR-условия с AND-условиями ---
     if (itemConditions.length > 0) {
-      where.OR = itemConditions;
+        andConditions.push({ OR: itemConditions });
     }
 
-    // --- Price ---
+    // --- Price (AND-условие) ---
     if (filters["prices.value_min"] || filters["prices.value_max"]) {
       const priceMin = filters["prices.value_min"]
         ? await this.crmService.toUsd(
@@ -473,12 +594,12 @@ export class ItemsService {
       if (priceMin !== undefined) priceWhere.gte = priceMin;
       if (priceMax !== undefined) priceWhere.lte = priceMax;
       console.log(priceMax, priceMin);
-      where.prices = { is: { priceUsd: priceWhere } }; // или valueUsd, если у тебя есть отдельное поле
+      andConditions.push({ prices: { is: { priceUsd: priceWhere } } }); // Добавляем в общий AND
     }
 
     const charConditions: any[] = [];
 
-    // --- диапазоны ---
+    // --- диапазоны (AND-условия) ---
     if (
       filters["characteristics.floor_min"] ||
       filters["characteristics.floor_max"]
@@ -513,7 +634,7 @@ export class ItemsService {
       charConditions.push(cond);
     }
 
-    // --- ремонт ---
+    // --- ремонт (AND-условие) ---
     if (filters["characteristics.renovation"]) {
       const renovations = String(filters["characteristics.renovation"]).split(
         ","
@@ -524,7 +645,7 @@ export class ItemsService {
       });
     }
 
-    // --- комнаты ---
+    // --- комнаты (AND-условие) ---
     if (filters["characteristics.room_count"]) {
       const values = String(filters["characteristics.room_count"]).split(",");
       charConditions.push({
@@ -533,12 +654,20 @@ export class ItemsService {
       });
     }
 
-    // --- итог ---
+    // --- итог характеристики (AND-условие) ---
     if (charConditions.length > 0) {
-      where.AND = charConditions.map((cond) => ({
-        characteristics: { some: cond },
-      }));
+      andConditions.push(
+        ...charConditions.map((cond) => ({
+          characteristics: { some: cond },
+        }))
+      );
     }
+    
+    // --- ✅ Применяем все собранные AND-условия к where ---
+    if (andConditions.length > 0) {
+        where.AND = andConditions;
+    }
+
     console.log("хуйня где:", where);
     // --- Query ---s
     const items = await this.prisma.item.findMany({
