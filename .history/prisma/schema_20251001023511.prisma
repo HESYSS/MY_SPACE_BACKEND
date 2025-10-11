@@ -1,0 +1,189 @@
+// schema.prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Item {
+  id              Int            @id @default(autoincrement())
+  crmId           String         @unique
+  status          String?
+
+  // Тексты
+  title           String?
+  titleEn         String?   // EN перевод
+  description     String?
+  descriptionEn   String?
+
+  // Сделка / тип / категория
+  deal            String?
+  type            String?
+  typeEn          String?
+  category        String?
+
+  // Новостройка
+  newbuildingName   String?
+  newbuildingNameEn String?
+
+  // Прочее
+  isNewBuilding   Boolean?
+  isOutOfCity     Boolean?
+  article         String?
+
+  createdAt       DateTime?
+  updatedAt       DateTime?
+
+  location        Location?
+  characteristics Characteristic[]
+  prices  Price? @relation("ItemToPrice")
+  images          Image[]
+  contacts        Contact[]
+  metros          Metro[]
+
+  slug            String?   @unique   // 👈 добавь поле slug
+}
+
+model Location {
+  id         Int     @id @default(autoincrement())
+  itemId     Int     @unique
+
+  // Локация
+  country    String?
+  region     String?
+  city       String?
+  county     String?
+  countyEn   String?
+  borough    String?
+  boroughEn  String?
+  district   String?
+  districtEn String?
+  street     String?
+  streetEn   String?
+  streetType String?
+
+  lat        Float?
+  lng        Float?
+
+  item       Item    @relation(fields: [itemId], references: [id])
+}
+
+model Metro {
+  id       Int    @id @default(autoincrement())
+  itemId   Int
+
+  name     String
+  distance Int
+
+  item     Item   @relation(fields: [itemId], references: [id])
+
+  @@index([itemId, distance])
+}
+
+
+model Characteristic {
+  id           Int    @id @default(autoincrement())
+  itemId       Int
+  key          String?
+  value        String?
+  valueEn      String?    // перевод значения (если нужно, например "с ремонтом")
+  valueNumeric Float?
+
+  item         Item   @relation(fields: [itemId], references: [id])
+  @@index([itemId, key])
+}
+model Price {
+  id       Int     @id @default(autoincrement())
+  value    Float
+  currency String  @default("USD")
+  priceUsd      Float
+  item     Item?   @relation(fields: [itemId], references: [id])
+  itemId   Int?    @unique
+  @@index([value])
+}
+
+model Image {
+  id       Int     @id @default(autoincrement())
+  itemId   Int
+  url      String
+  order    Int     @default(0) // порядок отображения
+  isActive Boolean @default(true) // видимость для админа
+
+  item     Item    @relation(fields: [itemId], references: [id])
+
+  @@index([itemId, order])
+}
+
+model Contact {
+  id     Int     @id @default(autoincrement())
+  itemId Int
+  name   String?
+  phone  String?
+  email  String?
+
+  item   Item    @relation(fields: [itemId], references: [id])
+}
+
+model Employee {
+  id              Int     @id @default(autoincrement())
+  firstName       String
+  lastName        String
+  position        String
+  experienceYears Int?
+  profile         String?
+  aboutMe         String?
+  firstNameEn     String?
+  lastNameEn      String?
+  positionEn      String?
+  profileEn       String?
+  aboutMeEn       String?
+  isPARTNER       Boolean @default(false)
+  isMANAGER       Boolean @default(false)
+  isACTIVE        Boolean @default(false)
+  photoUrl        String?
+}
+
+model Offer {
+  id          Int                 @id @default(autoincrement())
+  clientName  String
+  reason      OfferReason
+  propertyType OfferPropertyType
+  phoneNumber String
+  createdAt   DateTime            @default(now())
+  status      OfferStatus         @default(PENDING)
+}
+
+model SiteImage {
+  id  Int    @id @default(autoincrement())
+  name  String @unique
+  url   String
+}
+
+model Admin {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  role      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum OfferReason {
+  BUYING
+  SELLING
+}
+
+enum OfferPropertyType {
+  RESIDENTIAL
+  COMMERCIAL
+  LAND
+}
+
+enum OfferStatus {
+  PENDING      // Не рассмотрен
+  PROCESSED    // Обработан
+  COMPLETED    // Закончен
+}
