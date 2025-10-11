@@ -1,0 +1,15 @@
+import { Controller, Get } from "@nestjs/common";
+import { CrmService } from "./crm.service";
+
+@Controller("crm")
+export class CrmController {
+  constructor(private readonly crmService: CrmService) {}
+
+  @Get("feed")
+  async getFeed() {
+    console.log("Received request for /crm/feed");
+    const data = await this.crmService.syncData();
+    console.log("end");
+    return data;
+  }
+}
