@@ -40,10 +40,12 @@ model Item {
   prices           Price?         @relation("ItemToPrice") 
 
   images          Image[]
-  contacts        Contact[]
+  contacts        Contact?
   metros          Metro[]
 
   slug            String?   @unique
+  @@fulltext([title, titleEn, description, descriptionEn, newbuildingName, newbuildingNameEn])
+
 }
 
 model Price {
@@ -124,7 +126,7 @@ model Image {
 
 model Contact {
   id     Int     @id @default(autoincrement())
-  itemId Int
+  itemId Int     @unique
   name   String?
   phone  String?
   email  String?

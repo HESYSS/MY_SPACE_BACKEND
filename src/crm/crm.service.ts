@@ -230,6 +230,100 @@ export class CrmService {
     this.dtoContainer = [];
   }
 
+  private generateSlug(title: string, id: number): string {
+    const map: { [key: string]: string } = {
+      а: "a",
+      б: "b",
+      в: "v",
+      г: "g",
+      д: "d",
+      е: "e",
+      ё: "e",
+      ж: "zh",
+      з: "z",
+      и: "i",
+      й: "y",
+      к: "k",
+      л: "l",
+      м: "m",
+      н: "n",
+      о: "o",
+      п: "p",
+      р: "r",
+      с: "s",
+      т: "t",
+      у: "u",
+      ф: "f",
+      х: "kh",
+      ц: "ts",
+      ч: "ch",
+      ш: "sh",
+      щ: "shch",
+      ъ: "",
+      ы: "y",
+      ь: "",
+      э: "e",
+      ю: "yu",
+      я: "ya",
+      А: "A",
+      Б: "B",
+      В: "V",
+      Г: "G",
+      Д: "D",
+      Е: "E",
+      Ё: "E",
+      Ж: "Zh",
+      З: "Z",
+      И: "I",
+      Й: "Y",
+      К: "K",
+      Л: "L",
+      М: "M",
+      Н: "N",
+      О: "O",
+      П: "P",
+      Р: "R",
+      С: "S",
+      Т: "T",
+      У: "U",
+      Ф: "F",
+      Х: "Kh",
+      Ц: "Ts",
+      Ч: "Ch",
+      Ш: "Sh",
+      Щ: "Shch",
+      Ъ: "",
+      Ы: "Y",
+      Ь: "",
+      Э: "E",
+      Ю: "Yu",
+      Я: "Ya",
+      і: "i",
+      ї: "yi",
+      є: "ye",
+      ґ: "g",
+      І: "I",
+      Ї: "Yi",
+      Є: "Ye",
+      Ґ: "G",
+    };
+
+    const transliterate = (text: string) =>
+      text
+        .split("")
+        .map((c) => map[c] || c)
+        .join("");
+
+    const slugBase = transliterate(title || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/--+/g, "-");
+
+    return `${id}-${slugBase}`;
+  }
+
   async syncData(): Promise<void> {
     const response = await axios.get(this.crmUrl);
     const xml = response.data;
@@ -310,25 +404,23 @@ export class CrmService {
                 },
               }
             : undefined,
-          contacts: {
-            upsert: dto.contact
-              ? [
-                  {
-                    where: { id: 0 }, // аналогично, используем create если ID нет
-                    update: {
-                      name: dto.contact.name,
-                      phone: dto.contact.phone,
-                      email: dto.contact.email,
-                    },
-                    create: {
-                      name: dto.contact.name,
-                      phone: dto.contact.phone,
-                      email: dto.contact.email,
-                    },
+          contacts: dto.contact
+            ? {
+                upsert: {
+                  update: {
+                    name: dto.contact.name,
+                    phone: dto.contact.phone,
+                    email: dto.contact.email,
                   },
-                ]
-              : [],
-          },
+                  create: {
+                    name: dto.contact.name,
+                    phone: dto.contact.phone,
+                    email: dto.contact.email,
+                  },
+                },
+              }
+            : undefined,
+
           images: {
             upsert: dto.images.map((url, index) => ({
               where: { id: 0 }, // аналогично
@@ -370,6 +462,7 @@ export class CrmService {
               }) || []),
             ],
           },
+          slug: this.generateSlug(dto.title || "", Number(dto.id)),
         },
 
         create: {
@@ -465,6 +558,7 @@ export class CrmService {
               }) || []),
             ],
           },
+          slug: this.generateSlug(dto.title || "", Number(dto.id)),
         },
       });
     }
