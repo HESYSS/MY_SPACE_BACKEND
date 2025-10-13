@@ -1,15 +1,18 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Query } from "@nestjs/common";
 import { CrmService } from "./crm.service";
 
 @Controller("crm")
 export class CrmController {
   constructor(private readonly crmService: CrmService) {}
 
-  @Get("feed")
-  async getFeed() {
-    console.log("Received request for /crm/feed");
-    const data = await this.crmService.syncData();
-    console.log("end");
-    return data;
+  @Get("sync")
+  async sync(@Query("type") type: "day" | "all" = "day") {
+    const url =
+      type === "all"
+        ? "https://crm-myspace.realtsoft.net/feed/json?id=3&updates=all"
+        : "https://crm-myspace.realtsoft.net/feed/json?id=3&updates=day";
+
+    await this.crmService.syncData(url, type === "all");
+    return { message: `✅ Sync complete: ${type}` };
   }
 }

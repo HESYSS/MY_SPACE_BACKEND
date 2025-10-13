@@ -9,43 +9,33 @@ generator client {
 }
 
 model Item {
-  id              Int            @id @default(autoincrement())
-  crmId           String         @unique
+  id              Int              @id @default(autoincrement())
+  crmId           String           @unique
   status          String?
-
   title           String?
   titleEn         String?
   description     String?
   descriptionEn   String?
-
   deal            String?
   type            String?
   typeEn          String?
   category        String?
-
   newbuildingName   String?
   newbuildingNameEn String?
-
   isNewBuilding   Boolean?
   isOutOfCity     Boolean?
   article         String?
-
   createdAt       DateTime?
   updatedAt       DateTime?
 
   location        Location?
   characteristics Characteristic[]
-
-  // 🔹 связь один-к-одному
-  prices           Price?         @relation("ItemToPrice") 
-
+  prices          Price?
   images          Image[]
   contacts        Contact?
   metros          Metro[]
 
   slug            String?   @unique
-  @@fulltext([title, titleEn, description, descriptionEn, newbuildingName, newbuildingNameEn])
-
 }
 
 model Price {
@@ -53,20 +43,14 @@ model Price {
   value    Float
   currency String  @default("USD")
   priceUsd Float
-
-  // 🔹 связь один-к-одному
   itemId   Int     @unique
-  item     Item    @relation("ItemToPrice", fields: [itemId], references: [id])
-  
+  item     Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
   @@index([value])
 }
-
 
 model Location {
   id         Int     @id @default(autoincrement())
   itemId     Int     @unique
-
-  // Локация
   country    String?
   region     String?
   city       String?
@@ -79,48 +63,38 @@ model Location {
   street     String?
   streetEn   String?
   streetType String?
-
   lat        Float?
   lng        Float?
-
-  item       Item    @relation(fields: [itemId], references: [id])
+  item       Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
 }
 
 model Metro {
   id       Int    @id @default(autoincrement())
   itemId   Int
-
   name     String
   distance Int
-
-  item     Item   @relation(fields: [itemId], references: [id])
-
+  item     Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
   @@index([itemId, distance])
 }
-
 
 model Characteristic {
   id           Int    @id @default(autoincrement())
   itemId       Int
   key          String?
   value        String?
-  valueEn      String?    // перевод значения (если нужно, например "с ремонтом")
+  valueEn      String?
   valueNumeric Float?
-
-  item         Item   @relation(fields: [itemId], references: [id])
+  item         Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
   @@index([itemId, key])
 }
-
 
 model Image {
   id       Int     @id @default(autoincrement())
   itemId   Int
   url      String
-  order    Int     @default(0) // порядок отображения
-  isActive Boolean @default(true) // видимость для админа
-
-  item     Item    @relation(fields: [itemId], references: [id])
-
+  order    Int     @default(0)
+  isActive Boolean @default(true)
+  item     Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
   @@index([itemId, order])
 }
 
@@ -130,8 +104,7 @@ model Contact {
   name   String?
   phone  String?
   email  String?
-
-  item   Item    @relation(fields: [itemId], references: [id])
+  item   Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
 }
 
 model Employee {
