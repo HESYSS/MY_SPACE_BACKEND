@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CrmService } from "../crm/crm.service";
 import { Item } from "@prisma/client";
+import { contains } from "class-validator";
 
 // Создаем тип, который соответствует полям, выбираемым для админки
 type AdminItem = {
@@ -83,6 +84,7 @@ export class ItemsService {
         // Поиск по названию ЖК
         { newbuildingName: { contains: searchTerm, mode: "insensitive" } },
         { newbuildingNameEn: { contains: searchTerm, mode: "insensitive" } },
+        { article: { contains: searchTerm, mode: "insensitive" } },
         // Поиск по локации (улица, район, город)
         {
           location: {

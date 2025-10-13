@@ -8,8 +8,12 @@ import { TranslateService } from "../translate/translate.service";
 
 @Injectable()
 export class CrmService {
-  private crmUrl =
-    "https://crm-myspace.realtsoft.net/feed/xml?id=3&updates=all";
+  private dailyFeedUrl =
+    "https://crm-myspace.realtsoft.net/feed/json?id=3&updates=day";
+  private fullFeedUrl =
+    "https://crm-myspace.realtsoft.net/feed/json?id=3&updates=all";
+
+  private lastFullSync = 0;
 
   constructor(
     private prisma: PrismaService,
@@ -91,11 +95,8 @@ export class CrmService {
         return;
       }
 
-      console.log("Найдены новые DTO, запускаем перевод...");
-
       try {
         await this.translateAndSave();
-        console.log("Переводы сохранены");
       } catch (err) {
         console.error("Ошибка при автоматическом переводе:", err);
       }
@@ -110,7 +111,6 @@ export class CrmService {
 
   private async translateAndSave(): Promise<void> {
     if (!this.dtoContainer.length) {
-      console.log("Нет данных для перевода");
       return;
     }
 
@@ -223,7 +223,6 @@ export class CrmService {
           },
         },
       });
-      console.log(`Переводы для CRM ID ${dto.id} сохранены.`);
     }
 
     // очищаем контейнер после перевода
@@ -324,24 +323,54 @@ export class CrmService {
     return `${id}-${slugBase}`;
   }
 
-  async syncData(): Promise<void> {
-    const response = await axios.get(this.crmUrl);
-    const xml = response.data;
+  async startScheduler() {
+    const intervalMs = 60 * 1000; // 1 минута
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    let oneParse = true;
+    const run = async () => {
+      try {
+        const isNightTime = hours === 2 && oneParse;
+        if (isNightTime) {
+          await this.syncData(this.fullFeedUrl, true);
+          oneParse = false;
+        } else if (hours !== 2) {
+          oneParse = true;
+        } else {
+          await this.syncData(this.dailyFeedUrl, false);
+        }
+      } catch (e: any) {
+        console.error("❌ Ошибка синхронизации CRM:", e.message);
+      } finally {
+        setTimeout(run, intervalMs);
+      }
+    };
 
-    const parsed = await xml2js.parseStringPromise(xml, {
-      explicitArray: false,
-      mergeAttrs: true,
-    });
+    run();
+  }
 
-    const items = parsed.response.item
-      ? Array.isArray(parsed.response.item)
-        ? parsed.response.item
-        : [parsed.response.item]
-      : [];
+  /**
+   * 🔄 Синхронизация данных с CRM
+   */
+  async syncData(url: string, isFullSync: boolean): Promise<void> {
+    const response = await axios.get(url, { timeout: 30000 });
+    const data = response.data;
+
+    if (!data || !Array.isArray(data.estates)) {
+      console.error("⚠️ Некорректный формат: нет массива 'estates'");
+      return;
+    }
+
+    const items = data.estates.map((item: any) => item);
+
+    const seenCrmIds: string[] = [];
 
     for (const raw of items) {
-      const dto = this.mapXmlItemToDto(raw);
-      //this.pushDto(dto);
+      const dto = this.mapJsonItemToDto(raw);
+
+      seenCrmIds.push(dto.id);
+
       const priceUsd = await this.toUsd(dto.price.value, dto.price.currency);
 
       await this.prisma.item.upsert({
@@ -420,7 +449,6 @@ export class CrmService {
                 },
               }
             : undefined,
-
           images: {
             upsert: dto.images.map((url, index) => ({
               where: { id: 0 }, // аналогично
@@ -562,41 +590,63 @@ export class CrmService {
         },
       });
     }
+
+    if (isFullSync) {
+      const existing = await this.prisma.item.findMany({
+        select: { crmId: true },
+      });
+      const toDelete = existing
+        .map((i) => i.crmId)
+        .filter((id) => !seenCrmIds.includes(id));
+      if (toDelete.length > 0) {
+        await this.prisma.item.deleteMany({
+          where: { crmId: { in: toDelete } },
+        });
+      }
+    }
   }
 
-  private mapXmlItemToDto(item: any): CrmItemDto {
-    const getText = (field: any) => {
-      if (!field) return "";
+  /**
+   * 🧩 Преобразует JSON объект CRM в локальный формат
+   */
+  private mapJsonItemToDto(item: any): CrmItemDto {
+    const getText = (field: any): string => {
+      if (field == null) return "";
       if (typeof field === "string") return field.trim();
-      if (typeof field === "object" && "_" in field) return field._.trim();
-      if (typeof field === "object" && "value" in field)
-        return field.value.trim();
+      if (typeof field === "number") return field.toString();
       return "";
     };
-    const getNumber = (field: any) => (field ? parseFloat(field) : undefined);
 
-    const images = item.images?.image_url
-      ? Array.isArray(item.images.image_url)
-        ? item.images.image_url.map((i: any) => i?._ || i)
-        : [item.images.image_url?._ || item.images.image_url]
-      : [];
+    const getNumber = (field: any): number | null => {
+      if (field == null || field === "") return null;
+      const n = parseFloat(field);
+      return isNaN(n) ? null : n;
+    };
 
-    const extra = item.properties?.property
-      ? Array.isArray(item.properties.property)
-        ? item.properties.property.map((p: any) => ({
-            label: p.label || "",
-            value: p._ || "",
+    // 📸 Изображения
+    const images = Array.isArray(item.images)
+      ? item.images
+      : item.images
+        ? [item.images]
+        : [];
+
+    // 🧩 Дополнительные свойства
+    const extra =
+      Array.isArray(item.properties) && item.properties.length
+        ? item.properties.map((p: any) => ({
+            label: p.name || "",
+            value: p.value_name || p.value || "",
           }))
-        : [
-            {
-              label: item.properties.property.label || "",
-              value: item.properties.property._ || "",
-            },
-          ]
+        : [];
+
+    // 📍 Локация
+    const location = item.location || {};
+    const metros = Array.isArray(location.metros)
+      ? location.metros.map((m: any) => ({
+          name: getText(m.name),
+          distance: getNumber(m.distance) || 0,
+        }))
       : [];
-    const street = getText(item.location?.street);
-    const streetType = getText(item.location?.street_type);
-    const city = getText(item.location?.city);
 
     const characteristics: Record<string, any> = {};
     for (const key in item) {
@@ -610,58 +660,43 @@ export class CrmService {
     }
     characteristics.extra = extra;
 
-    const phones = item.user?.phones?.phone
-      ? Array.isArray(item.user.phones.phone)
-        ? item.user.phones.phone.map((p: any) => p?._ || p).join(", ")
-        : item.user.phones.phone?._ || item.user.phones.phone
-      : "";
+    const phones = Array.isArray(item.user?.phones)
+      ? item.user.phones.join(", ")
+      : getText(item.user?.phones);
 
-    const metroArray = item.location?.metros?.metro
-      ? Array.isArray(item.location.metros.metro)
-        ? item.location.metros.metro
-        : [item.location.metros.metro]
-      : [];
-
-    const county = item.location?.county;
+    const county = location?.county;
     const isOutOfCity = !county;
-    const metros = metroArray.map((m: any) => ({
-      name: m._ || "",
-      distance: parseInt(m.value || m.$?.value || "0", 10),
-    }));
 
     return {
-      id: item["internal-id"] || "",
-      status: item.status,
-      title: item.title,
-      description: item.description,
-      deal: getText(item.deal),
-      type: getText(item.realty_type),
+      id: item.id?.toString() || "",
+      status: item.status || "active",
+      title: getText(item.title),
+      description: getText(item.description),
+      deal: getText(item.deal?.name),
+      type: getText(item.realty_type?.name),
       is_new_building: item.is_new_building
-        ? parseInt(item.is_new_building, 10)
+        ? parseInt(item.is_new_building)
         : null,
-      isOutOfCity, // <- новое поле
+      isOutOfCity, // <- поле как в XML-версии
       article: getText(item.article),
-      category: getText(item.category),
+      category: getText(item.category?.name),
       newbuilding_name: getText(item.newbuilding_name),
       location: {
-        country: getText(item.location?.country),
-        region: getText(item.location?.region),
-        city,
-        borough: getText(item.location?.borough),
-        district: getText(item.location?.district),
-        street,
-        county: county ? getText(county) : null,
-        street_type: streetType,
-        lat: getNumber(item.location?.map_lat),
-        lng: getNumber(item.location?.map_lng),
-        metros: metroArray.map((m: any) => ({
-          name: m._ || "",
-          distance: parseInt(m.value || m.$?.value || "0", 10),
-        })),
+        country: getText(location.country?.name),
+        region: getText(location.region?.name),
+        city: getText(location.city?.name),
+        borough: getText(location.borough?.name),
+        district: getText(location.district?.name),
+        street: getText(location.street?.name),
+        county: county ? getText(county.name) : undefined,
+        street_type: getText(location.street_type),
+        lat: getNumber(location.map_lat) || undefined,
+        lng: getNumber(location.map_lng) || undefined,
+        metros,
       },
       characteristics,
       price: {
-        value: getNumber(item.price?._) || 0,
+        value: getNumber(item.price?.value) || 0,
         currency: item.price?.currency || "USD",
       },
       images,

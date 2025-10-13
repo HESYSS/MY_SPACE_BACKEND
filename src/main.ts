@@ -1,9 +1,9 @@
-// src/main.ts
-
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./module/app.module";
 import cors from "cors";
-import { ValidationPipe } from "@nestjs/common"; // <-- Импортируем ValidationPipe
+import { ValidationPipe } from "@nestjs/common";
+import { fork } from "child_process";
+import { join } from "path";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -12,21 +12,31 @@ async function bootstrap() {
     cors({
       origin: [
         "http://localhost:3000",
-        "https://e01977d1efbd3f0e8b903f8de9800194.serveo.net",
+        "https://0b6477c30b08fdb729ee355e29714a96.serveo.net",
       ],
       methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     })
   );
 
-  // <-- Вставляем эту строку
   app.useGlobalPipes(
     new ValidationPipe({
-      transform: true, // Включаем автоматическое преобразование типов
+      transform: true,
     })
   );
 
   await app.listen(3001);
   console.log(`Server running on http://localhost:3001`);
+
+  // ===== Запуск CRM Worker =====
+  const workerPath = join(__dirname, "crm", "crm.worker.js"); // путь к скомпилированному JS
+  const crmWorker = fork(workerPath);
+
+  crmWorker.on("message", (msg) => console.log("CRM Worker:", msg));
+  crmWorker.on("exit", (code) =>
+    console.log(`CRM Worker завершился с кодом ${code}`)
+  );
+
+  console.log("CRM Worker запущен в отдельном процессе");
 }
 
 bootstrap();
