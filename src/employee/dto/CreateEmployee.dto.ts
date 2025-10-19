@@ -1,7 +1,7 @@
 // src/employee/dto/create-employee.dto.ts
 
-import { IsOptional, IsString, IsBoolean, IsNumber } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { IsOptional, IsString, IsBoolean, IsNumber } from "class-validator";
+import { Transform } from "class-transformer";
 
 export class CreateEmployeeDto {
   @IsString()
@@ -48,16 +48,20 @@ export class CreateEmployeeDto {
 
   // Теперь это булевы значения, преобразованные из строк
   @IsBoolean()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ value }) => value === "true")
   isPARTNER!: boolean;
 
   @IsBoolean()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ value }) => value === "true")
   isMANAGER!: boolean;
 
   @IsBoolean()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ value }) => value === "true")
   isACTIVE!: boolean;
+
+  @IsBoolean()
+  @Transform(({ value }) => value === "true")
+  isSUPERVISOR!: boolean;
 
   @IsString()
   @IsOptional()
