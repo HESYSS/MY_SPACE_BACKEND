@@ -323,20 +323,21 @@ export class CrmService {
     return `${id}-${slugBase}`;
   }
 
- async startScheduler() {
+  async startScheduler() {
     const intervalMs = 60 * 1000; // 1 минута
     let oneParse = true;
 
     const run = async () => {
       try {
         const now = new Date();
-        const hours = now.getHours()+3;
+        const hours = now.getHours() + 3;
 
         const isNightTime = hours === 3 && oneParse;
         if (isNightTime) {
-          await this.syncData(this.fullFeedUrl, true);
-          oneParse = false;
           console.log("Старт глобального парсера");
+          await this.syncData(this.fullFeedUrl, true);
+          console.log("✅ Полная синхронизация CRM завершена");
+          oneParse = false;
         } else {
           await this.syncData(this.dailyFeedUrl, false);
           console.log("Парсим каждую минуту", hours);
@@ -352,8 +353,7 @@ export class CrmService {
     run();
   }
 
-
-   /**
+  /**
    * 🔄 Синхронизация данных с CRM
    */
   async syncData(url: string, isFullSync: boolean): Promise<void> {
@@ -470,7 +470,7 @@ export class CrmService {
                 },
               }
             : undefined,
-           images: {
+          images: {
             // 1️⃣ Удаляем всё, чего нет в dto.images
             deleteMany: {
               itemId: Number(dto.id),
@@ -481,14 +481,13 @@ export class CrmService {
 
             // 2️⃣ Создаём новые, которых ещё нет в базе
             create: newImages.length
-    ? newImages.map(img => ({
-        url: img.url,
-        order: img.order,
-      }))
-    : undefined,
+              ? newImages.map((img) => ({
+                  url: img.url,
+                  order: img.order,
+                }))
+              : undefined,
           },
-                  
-         
+
           metros: {
             deleteMany: {}, // очищаем старые
             create:
@@ -693,10 +692,10 @@ export class CrmService {
     }
     characteristics.extra = extra;
 
-    const phones = Array.isArray(item.user?.phones)
-      ? item.user.phones.join(", ")
-      : getText(item.user?.phones);
-
+    const phones =
+      item.user?.properties?.find(
+        (p: any) => p.name === "Робочий номер тел. (сайт)"
+      )?.value || "";
     const county = location?.county;
     const isOutOfCity = !county;
 
