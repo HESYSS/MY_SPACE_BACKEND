@@ -336,6 +336,7 @@ export class ItemsService {
           item.descriptionEn,
           item.newbuildingName,
           item.newbuildingNameEn,
+          item.article,
           item.location?.street,
           item.location?.district,
           item.location?.city,
@@ -508,7 +509,8 @@ export class ItemsService {
         // Поиск по названию ЖК
         { newbuildingName: { contains: searchTerm, mode: "insensitive" } },
         { newbuildingNameEn: { contains: searchTerm, mode: "insensitive" } },
-        // Поиск по локации (улица, район, город)
+        { article: { contains: searchTerm, mode: "insensitive" } },
+ // Поиск по локации (улица, район, город)
         {
           location: {
             is: {

@@ -323,22 +323,24 @@ export class CrmService {
     return `${id}-${slugBase}`;
   }
 
-  async startScheduler() {
+ async startScheduler() {
     const intervalMs = 60 * 1000; // 1 минута
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
     let oneParse = true;
+
     const run = async () => {
       try {
-        const isNightTime = hours === 2 && oneParse;
+        const now = new Date();
+        const hours = now.getHours()+3;
+
+        const isNightTime = hours === 3 && oneParse;
         if (isNightTime) {
           await this.syncData(this.fullFeedUrl, true);
           oneParse = false;
-        } else if (hours !== 2) {
-          oneParse = true;
+          console.log("Старт глобального парсера");
         } else {
           await this.syncData(this.dailyFeedUrl, false);
+          console.log("Парсим каждую минуту", hours);
+          if (hours !== 3) oneParse = true;
         }
       } catch (e: any) {
         console.error("❌ Ошибка синхронизации CRM:", e.message);
@@ -350,7 +352,8 @@ export class CrmService {
     run();
   }
 
-  /**
+
+   /**
    * 🔄 Синхронизация данных с CRM
    */
   async syncData(url: string, isFullSync: boolean): Promise<void> {
@@ -370,6 +373,24 @@ export class CrmService {
       const dto = this.mapJsonItemToDto(raw);
 
       seenCrmIds.push(dto.id);
+
+      const filteredImages = dto.images.filter((url): url is string => !!url);
+
+      // 2️⃣ Берём существующие URL для текущего item
+      const existingImages = await this.prisma.image.findMany({
+        where: { item: { crmId: dto.id } },
+        select: { url: true },
+      });
+
+      const existingUrls = new Set(existingImages.map((i) => i.url));
+
+      // 3️⃣ Создаём массив новых изображений
+      const newImages = filteredImages
+        .filter((url) => !existingUrls.has(url))
+        .map((url, index) => ({
+          url,
+          order: index,
+        }));
 
       const priceUsd = await this.toUsd(dto.price.value, dto.price.currency);
 
@@ -449,13 +470,25 @@ export class CrmService {
                 },
               }
             : undefined,
-          images: {
-            upsert: dto.images.map((url, index) => ({
-              where: { id: 0 }, // аналогично
-              update: { url, order: index },
-              create: { url, order: index },
-            })),
+           images: {
+            // 1️⃣ Удаляем всё, чего нет в dto.images
+            deleteMany: {
+              itemId: Number(dto.id),
+              NOT: {
+                url: { in: dto.images.filter(Boolean) },
+              },
+            },
+
+            // 2️⃣ Создаём новые, которых ещё нет в базе
+            create: newImages.length
+    ? newImages.map(img => ({
+        url: img.url,
+        order: img.order,
+      }))
+    : undefined,
           },
+                  
+         
           metros: {
             deleteMany: {}, // очищаем старые
             create:
