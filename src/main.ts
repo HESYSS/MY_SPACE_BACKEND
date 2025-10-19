@@ -11,12 +11,14 @@ async function bootstrap() {
   app.use(
     cors({
       origin: [
-        "http://localhost:3000",
-        "https://0b6477c30b08fdb729ee355e29714a96.serveo.net",
+        "https://myspace.in.ua",
+        "https://www.myspace.in.ua",
       ],
       methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     })
   );
+
+  app.setGlobalPrefix('api');
 
   app.useGlobalPipes(
     new ValidationPipe({
