@@ -123,6 +123,7 @@ model Employee {
   isPARTNER       Boolean @default(false)
   isMANAGER       Boolean @default(false)
   isACTIVE        Boolean @default(false)
+  isSUPERVISOR    Boolean @default(false)
   photoUrl        String?
 }
 

@@ -1,11 +1,20 @@
 // employee.service.ts
-import { Injectable, BadRequestException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { Employee } from '@prisma/client';
-import { CreateEmployeeDto } from './dto/CreateEmployee.dto';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  InternalServerErrorException,
+} from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
+import { Employee } from "@prisma/client";
+import { CreateEmployeeDto } from "./dto/CreateEmployee.dto";
 // Добавляем DeleteObjectCommand для удаления файлов
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'; 
-import { randomUUID } from 'crypto';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
+import { randomUUID } from "crypto";
 
 @Injectable()
 export class EmployeeService {
@@ -16,12 +25,18 @@ export class EmployeeService {
   constructor(private prisma: PrismaService) {
     // Инициализация S3 клиента для взаимодействия с Cloudflare R2
     // Переменные для доступа загружаются из окружения (.env файл)
-    if (!process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY || !process.env.R2_ENDPOINT) {
-      throw new InternalServerErrorException('Missing R2 environment variables. Please check your .env file.');
+    if (
+      !process.env.R2_ACCESS_KEY_ID ||
+      !process.env.R2_SECRET_ACCESS_KEY ||
+      !process.env.R2_ENDPOINT
+    ) {
+      throw new InternalServerErrorException(
+        "Missing R2 environment variables. Please check your .env file."
+      );
     }
-    
+
     this.r2Client = new S3Client({
-      region: 'auto', // Автоматическое определение региона
+      region: "auto", // Автоматическое определение региона
       endpoint: process.env.R2_ENDPOINT,
       credentials: {
         accessKeyId: process.env.R2_ACCESS_KEY_ID,
@@ -31,32 +46,43 @@ export class EmployeeService {
   }
 
   // Метод создания работника теперь принимает файл с фотографией
-  async createEmployee(data: CreateEmployeeDto, file: Express.Multer.File): Promise<Employee> {
+  async createEmployee(
+    data: CreateEmployeeDto,
+    file: Express.Multer.File
+  ): Promise<Employee> {
     // Валидация: работник не может быть одновременно партнером и менеджером
-    if (data.isPARTNER && data.isMANAGER) {
-      throw new BadRequestException('An employee cannot be both a partner and a manager simultaneously.');
+    if (data.isPARTNER && data.isMANAGER && data.isSUPERVISOR) {
+      throw new BadRequestException(
+        "An employee cannot be both a partner and a manager simultaneously."
+      );
     }
 
     // Проверка ограничений на количество сотрудников
-    const partnerCount = await this.prisma.employee.count({ where: { isPARTNER: true } });
-    const managerCount = await this.prisma.employee.count({ where: { isMANAGER: true } });
-    const activeCount = await this.prisma.employee.count({ where: { isACTIVE: true } });
+    const partnerCount = await this.prisma.employee.count({
+      where: { isPARTNER: true },
+    });
+    const managerCount = await this.prisma.employee.count({
+      where: { isSUPERVISOR: true },
+    });
+    const activeCount = await this.prisma.employee.count({
+      where: { isACTIVE: true },
+    });
 
     if (data.isPARTNER && partnerCount >= 4) {
-      throw new BadRequestException('Cannot add more than 4 partners.');
+      throw new BadRequestException("Cannot add more than 4 partners.");
     }
     if (data.isMANAGER && managerCount >= 4) {
-      throw new BadRequestException('Cannot add more than 4 managers.');
+      throw new BadRequestException("Cannot add more than 4 supervisors.");
     }
     if (data.isACTIVE && activeCount >= 8) {
-      throw new BadRequestException('Cannot add more than 8 active employees.');
+      throw new BadRequestException("Cannot add more than 8 active employees.");
     }
 
     let photoUrl: string | null = null;
     if (file) {
       // Генерация уникального имени для файла, чтобы избежать конфликтов
       const fileName = `${randomUUID()}-${file.originalname}`;
-      
+
       const uploadCommand = new PutObjectCommand({
         Bucket: this.R2_BUCKET_NAME,
         Key: fileName,
@@ -69,8 +95,10 @@ export class EmployeeService {
         // Формирование публичного URL-адреса для доступа к загруженному файлу
         photoUrl = `${this.R2_PUBLIC_URL}/${fileName}`;
       } catch (error) {
-        console.error('Ошибка загрузки файла в R2:', error);
-        throw new InternalServerErrorException('Failed to upload employee photo.');
+        console.error("Ошибка загрузки файла в R2:", error);
+        throw new InternalServerErrorException(
+          "Failed to upload employee photo."
+        );
       }
     }
 
@@ -113,7 +141,7 @@ export class EmployeeService {
     const photoUrl = employeeToDelete.photoUrl;
     if (photoUrl) {
       // Извлекаем имя файла из URL-адреса
-      const fileName = photoUrl.substring(photoUrl.lastIndexOf('/') + 1);
+      const fileName = photoUrl.substring(photoUrl.lastIndexOf("/") + 1);
 
       try {
         // Создаём команду для удаления файла из бакета
@@ -121,15 +149,18 @@ export class EmployeeService {
           Bucket: this.R2_BUCKET_NAME,
           Key: fileName,
         });
-        
+
         // Отправляем команду R2 клиенту
         await this.r2Client.send(deleteCommand);
         console.log(`Файл ${fileName} успешно удален из бакета.`);
       } catch (error) {
-        // Если удаление файла не удалось (например, файл не найден), 
+        // Если удаление файла не удалось (например, файл не найден),
         // логируем ошибку, но продолжаем удалять запись из базы данных,
         // чтобы не прерывать основной процесс.
-        console.error(`Ошибка при удалении файла ${fileName} из бакета:`, error);
+        console.error(
+          `Ошибка при удалении файла ${fileName} из бакета:`,
+          error
+        );
       }
     }
 
