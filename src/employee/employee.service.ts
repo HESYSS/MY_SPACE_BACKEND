@@ -68,11 +68,11 @@ export class EmployeeService {
       where: { isACTIVE: true },
     });
 
-    if (data.isPARTNER && partnerCount >= 4) {
-      throw new BadRequestException("Cannot add more than 4 partners.");
+    if (data.isPARTNER && partnerCount >= 6) {
+      throw new BadRequestException("Cannot add more than 6 partners.");
     }
-    if (data.isMANAGER && managerCount >= 4) {
-      throw new BadRequestException("Cannot add more than 4 supervisors.");
+    if (data.isSUPERVISOR && managerCount >= 6) {
+      throw new BadRequestException("Cannot add more than 6 supervisors.");
     }
     if (data.isACTIVE && activeCount >= 8) {
       throw new BadRequestException("Cannot add more than 8 active employees.");
