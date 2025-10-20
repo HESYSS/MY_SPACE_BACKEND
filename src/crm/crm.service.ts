@@ -182,26 +182,42 @@ export class CrmService {
       // Характеристики
       const characteristicsWithTranslations = await Promise.all(
         [
+          // основные характеристики
           ...Object.entries(dto.characteristics || {})
             .filter(
               ([key]) =>
                 key !== "extra" && dto.characteristics[key] !== undefined
             )
-            .map(([key, value]) => ({ key, value: String(value) })),
+            .map(([key, value]) => ({
+              key,
+              value: String(value),
+            })),
+
+          // дополнительные характеристики (extra)
           ...(dto.characteristics?.extra?.map((e) => ({
             key: e.label,
             value: e.value,
           })) || []),
         ].map(async (c) => ({
           key: c.key,
-
+          value: c.value, // 👈 сохраняем исходное значение
           valueEn: c.value
             ? await this.translateService.translateText(c.value, "en")
             : "",
         }))
       );
+      const item = await this.prisma.item.findUnique({
+        where: { crmId: dto.id },
+        select: { id: true },
+      });
 
-      // Сохраняем переводы
+      if (!item) {
+        console.warn(`❗ Item с crmId=${dto.id} не найден — пропуск`);
+        return;
+      }
+
+      const itemId = item.id;
+
       await this.prisma.item.update({
         where: { crmId: dto.id },
         data: {
@@ -209,15 +225,10 @@ export class CrmService {
           descriptionEn,
           typeEn,
           newbuildingNameEn,
-          location: dto.location
-            ? {
-                update: locationEn,
-              }
-            : undefined,
-
+          location: dto.location ? { update: locationEn } : undefined,
           characteristics: {
             updateMany: characteristicsWithTranslations.map((c) => ({
-              where: { key: c.key, itemId: Number(dto.id) },
+              where: { key: c.key, itemId }, // ✅ itemId точно число
               data: { valueEn: c.valueEn },
             })),
           },
@@ -332,17 +343,17 @@ export class CrmService {
         const now = new Date();
         const hours = now.getHours() + 3;
 
-        const isNightTime = hours === 3 && oneParse;
+        const isNightTime = hours === 17 && oneParse;
         if (isNightTime) {
           console.log("Старт глобального парсера");
           await this.syncData(this.fullFeedUrl, true);
           console.log("✅ Полная синхронизация CRM завершена");
           oneParse = false;
-        } else {
+        } /*else {
           await this.syncData(this.dailyFeedUrl, false);
           console.log("Парсим каждую минуту", hours);
           if (hours !== 3) oneParse = true;
-        }
+        }*/
       } catch (e: any) {
         console.error("❌ Ошибка синхронизации CRM:", e.message);
       } finally {
@@ -373,7 +384,22 @@ export class CrmService {
       const dto = this.mapJsonItemToDto(raw);
 
       seenCrmIds.push(dto.id);
+      /*
+      const existing = await this.prisma.item.findUnique({
+        where: { crmId: dto.id },
+        select: { updatedAt: true },
+      });
 
+      if (existing?.updatedAt) {
+        const existingUpdatedAt = new Date(existing.updatedAt).getTime();
+        const newUpdatedAt = new Date(dto.updatedAt).getTime();
+
+        // Если запись не изменилась — пропускаем
+        if (existingUpdatedAt === newUpdatedAt) {
+          continue;
+        }
+      }*/
+      this.pushDto(dto);
       const filteredImages = dto.images.filter((url): url is string => !!url);
 
       // 2️⃣ Берём существующие URL для текущего item
