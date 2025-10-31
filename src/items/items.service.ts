@@ -104,7 +104,12 @@ export class ItemsService {
     }
 
     // --- Location (borough, street, city, district) ---
-    if (filters.borough || filters.street || filters.city || filters.district) {
+    if (
+      filters.borough ||
+      filters.street ||
+      filters.directions ||
+      filters.district
+    ) {
       const locationConditions: any[] = [];
 
       if (filters.borough) {
@@ -122,9 +127,9 @@ export class ItemsService {
         locationConditions.push({ streetEn: { in: streets } });
       }
 
-      if (filters.city) {
-        const cities = String(filters.city).split(",");
-        locationConditions.push({ city: { in: cities } });
+      if (filters.directions) {
+        const county = String(filters.directions).split(",");
+        locationConditions.push({ county: { in: county } });
       }
 
       if (filters.district) {
@@ -182,11 +187,27 @@ export class ItemsService {
 
     // --- Newbuildings ---
     if (filters.newbuildings) {
-      const buildings = String(filters.newbuildings).split(",");
-      itemConditions.push(
-        { newbuildingName: { in: buildings.map((b) => b.trim()) } },
-        { newbuildingNameEn: { in: buildings.map((b) => b.trim()) } }
-      );
+      const buildings = String(filters.newbuildings)
+        .split(",")
+        .map((b) => b.trim())
+        .filter(Boolean); // убираем пустые строки
+
+      if (buildings.length > 0) {
+        itemConditions.push({
+          OR: [
+            ...buildings.map((b) => ({
+              newbuildingName: {
+                contains: b,
+              },
+            })),
+            ...buildings.map((b) => ({
+              newbuildingNameEn: {
+                contains: b,
+              },
+            })),
+          ],
+        });
+      }
     }
 
     // --- ✅ ИСПРАВЛЕНИЕ: Объединяем OR-условия с AND-условиями ---
@@ -510,7 +531,7 @@ export class ItemsService {
         { newbuildingName: { contains: searchTerm, mode: "insensitive" } },
         { newbuildingNameEn: { contains: searchTerm, mode: "insensitive" } },
         { article: { contains: searchTerm, mode: "insensitive" } },
- // Поиск по локации (улица, район, город)
+        // Поиск по локации (улица, район, город)
         {
           location: {
             is: {
@@ -529,7 +550,12 @@ export class ItemsService {
     }
 
     // --- Location (borough, street, city, district) ---
-    if (filters.borough || filters.street || filters.city || filters.district) {
+    if (
+      filters.borough ||
+      filters.street ||
+      filters.directions ||
+      filters.district
+    ) {
       const locationConditions: any[] = [];
 
       if (filters.borough) {
@@ -551,11 +577,9 @@ export class ItemsService {
         });
       }
 
-      if (filters.city) {
-        const cities = String(filters.city).split(",");
-        locationConditions.push({
-          city: { in: cities },
-        });
+      if (filters.directions) {
+        const county = String(filters.directions).split(",");
+        locationConditions.push({ county: { in: county } });
       }
 
       if (filters.district) {
@@ -613,11 +637,27 @@ export class ItemsService {
 
     // --- Newbuildings ---
     if (filters.newbuildings) {
-      const buildings = String(filters.newbuildings).split(",");
-      itemConditions.push(
-        { newbuildingName: { in: buildings.map((b) => b.trim()) } },
-        { newbuildingNameEn: { in: buildings.map((b) => b.trim()) } }
-      );
+      const buildings = String(filters.newbuildings)
+        .split(",")
+        .map((b) => b.trim())
+        .filter(Boolean); // убираем пустые строки
+
+      if (buildings.length > 0) {
+        itemConditions.push({
+          OR: [
+            ...buildings.map((b) => ({
+              newbuildingName: {
+                contains: b,
+              },
+            })),
+            ...buildings.map((b) => ({
+              newbuildingNameEn: {
+                contains: b,
+              },
+            })),
+          ],
+        });
+      }
     }
 
     // --- ✅ ИСПРАВЛЕНИЕ: Объединяем OR-условия с AND-условиями ---
@@ -725,6 +765,7 @@ export class ItemsService {
       select: {
         id: true,
         crmId: true,
+        slug: true,
         location: { select: { lat: true, lng: true } },
       },
     });
@@ -732,6 +773,7 @@ export class ItemsService {
     return items.map((item) => ({
       id: String(item.id),
       crmId: item.crmId,
+      slug: item.slug,
       lat: item.location?.lat ?? null,
       lng: item.location?.lng ?? null,
     }));
@@ -813,6 +855,11 @@ export class ItemsService {
       };
     }
 
+    let contacts = item.contacts;
+    if (lang === "en" && item.contacts?.name) {
+      contacts = await this.getEmployeeEnglishName(item.contacts);
+    }
+
     return {
       id: String(item.id),
       crmId: item.crmId,
@@ -827,22 +874,41 @@ export class ItemsService {
       prices: item.prices ?? [],
       images: item.images ?? [],
       characteristics,
-      contacts: item.contacts ?? [],
+      contacts,
       article: item.article,
     };
   }
-  async getLocation(filters?: { lang?: string }) {
+
+  async getLocation(filters?: {
+    lang?: string;
+    category?: string;
+    deal?: string;
+    type?: string;
+  }) {
     const lang = filters?.lang || "ua"; // по умолчанию украинский
-    console.log("lang:", lang);
+    const { category, deal, type } = filters || {};
+
+    console.log("Фильтры локаций:", { lang, category, deal, type });
+
     const getField = (field?: string | null, fieldEn?: string | null) =>
       lang === "en" ? (fieldEn ?? field ?? "") : (field ?? "");
+
+    // Базовое условие для item
+    const itemWhereBase: any = {};
+
+    if (category) itemWhereBase.category = category + " нерухомість";
+    if (deal) itemWhereBase.deal = deal;
+    if (type) itemWhereBase.type = type;
 
     // Улицы по Киеву
     const kyivStreets = await this.prisma.location.findMany({
       select: { street: true, streetEn: true },
       where: {
         street: { not: null },
-        item: { isOutOfCity: true },
+        item: {
+          ...itemWhereBase,
+          isOutOfCity: true,
+        },
       },
       distinct: ["street"],
       orderBy: { street: "asc" },
@@ -853,7 +919,10 @@ export class ItemsService {
       select: { street: true, streetEn: true },
       where: {
         street: { not: null },
-        item: { isOutOfCity: false },
+        item: {
+          ...itemWhereBase,
+          isOutOfCity: false,
+        },
       },
       distinct: ["street"],
       orderBy: { street: "asc" },
@@ -862,7 +931,11 @@ export class ItemsService {
     // ЖК по Киеву
     const kyivNewbuildings = await this.prisma.item.findMany({
       select: { newbuildingName: true, newbuildingNameEn: true },
-      where: { newbuildingName: { not: null }, isOutOfCity: true },
+      where: {
+        ...itemWhereBase,
+        newbuildingName: { not: null },
+        isOutOfCity: true,
+      },
       distinct: ["newbuildingName"],
       orderBy: { newbuildingName: "asc" },
     });
@@ -870,7 +943,11 @@ export class ItemsService {
     // ЖК по области
     const regionNewbuildings = await this.prisma.item.findMany({
       select: { newbuildingName: true, newbuildingNameEn: true },
-      where: { newbuildingName: { not: null }, isOutOfCity: false },
+      where: {
+        ...itemWhereBase,
+        newbuildingName: { not: null },
+        isOutOfCity: false,
+      },
       distinct: ["newbuildingName"],
       orderBy: { newbuildingName: "asc" },
     });
@@ -880,7 +957,9 @@ export class ItemsService {
       select: { county: true, countyEn: true },
       where: {
         county: { not: null },
-        item: { isOutOfCity: true },
+        item: {
+          isOutOfCity: false,
+        },
       },
       distinct: ["county"],
       orderBy: { county: "asc" },
@@ -902,7 +981,6 @@ export class ItemsService {
       },
     };
   }
-
   /**
    * Возвращает список всех объектов недвижимости для админки.
    * @returns Массив объектов AdminItem.
@@ -922,5 +1000,31 @@ export class ItemsService {
         createdAt: "desc",
       },
     });
+  }
+
+  private async getEmployeeEnglishName(contact: any) {
+    const fullName = contact.name?.trim();
+    if (!fullName) return contact;
+
+    const parts = fullName.split(/\s+/).filter(Boolean); // разбиваем по пробелам
+    if (parts.length === 0) return contact;
+
+    // создаём список условий: если хотя бы одно слово встречается в имени или фамилии
+    const orConditions = parts.flatMap((word: string) => [
+      { firstName: { contains: word, mode: "insensitive" } },
+      { lastName: { contains: word, mode: "insensitive" } },
+    ]);
+
+    // ищем сотрудника, где имя и фамилия хотя бы частично совпадают
+    const employee = await this.prisma.employee.findFirst({
+      where: { OR: orConditions },
+    });
+
+    if (!employee) return contact;
+
+    return {
+      ...contact,
+      name: `${employee.firstNameEn ?? employee.firstName} ${employee.lastNameEn ?? employee.lastName}`,
+    };
   }
 }
