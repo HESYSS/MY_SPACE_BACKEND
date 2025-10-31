@@ -41,12 +41,21 @@ export class ItemsController {
   }
 
   @Get("location")
-  async getLocation(@Headers("accept-language") lang: string) {
-    console.log("Получение локации с языком:", lang);
+  async getLocation(
+    @Headers("accept-language") lang: string,
+    @Query("category") category?: string,
+    @Query("deal") deal?: string,
+    @Query("type") type?: string
+  ) {
+    console.log("Получение локации:", { lang, category, deal, type });
 
     const data = await this.itemsService.getLocation({
       lang,
+      category,
+      deal,
+      type,
     });
+
     return data;
   }
 

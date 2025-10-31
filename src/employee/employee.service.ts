@@ -15,6 +15,8 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
+import path from "path";
+import * as fs from "fs";
 
 @Injectable()
 export class EmployeeService {
@@ -43,21 +45,19 @@ export class EmployeeService {
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
       },
     });
-  }
+  } // Метод создания работника теперь принимает файл с фотографией
 
-  // Метод создания работника теперь принимает файл с фотографией
   async createEmployee(
-    data: CreateEmployeeDto,
-    file: Express.Multer.File
+    data: CreateEmployeeDto, // 💡 ИЗМЕНЕНИЕ: делаем file необязательным параметром
+    file?: Express.Multer.File
   ): Promise<Employee> {
     // Валидация: работник не может быть одновременно партнером и менеджером
     if (data.isPARTNER && data.isMANAGER && data.isSUPERVISOR) {
       throw new BadRequestException(
         "An employee cannot be both a partner and a manager simultaneously."
       );
-    }
+    } // Проверка ограничений на количество сотрудников
 
-    // Проверка ограничений на количество сотрудников
     const partnerCount = await this.prisma.employee.count({
       where: { isPARTNER: true },
     });
@@ -78,9 +78,10 @@ export class EmployeeService {
       throw new BadRequestException("Cannot add more than 8 active employees.");
     }
 
-    let photoUrl: string | null = null;
+    let photoUrl: string;
+
     if (file) {
-      // Генерация уникального имени для файла, чтобы избежать конфликтов
+      // Если пользователь загрузил фото
       const fileName = `${randomUUID()}-${file.originalname}`;
 
       const uploadCommand = new PutObjectCommand({
@@ -92,7 +93,6 @@ export class EmployeeService {
 
       try {
         await this.r2Client.send(uploadCommand);
-        // Формирование публичного URL-адреса для доступа к загруженному файлу
         photoUrl = `${this.R2_PUBLIC_URL}/${fileName}`;
       } catch (error) {
         console.error("Ошибка загрузки файла в R2:", error);
@@ -100,9 +100,95 @@ export class EmployeeService {
           "Failed to upload employee photo."
         );
       }
+    } else {
+      // Если файла нет — используем локальный дефолт и загружаем в R2
+      const defaultFilePath = path.join(
+        __dirname,
+        "../assets/default-avatar.png"
+      );
+      const defaultBuffer = fs.readFileSync(defaultFilePath);
+      const fileName = `${randomUUID()}-default-avatar.png`;
+
+      const uploadCommand = new PutObjectCommand({
+        Bucket: this.R2_BUCKET_NAME,
+        Key: fileName,
+        Body: defaultBuffer,
+        ContentType: "image/png",
+      });
+
+      try {
+        await this.r2Client.send(uploadCommand);
+        photoUrl = `${this.R2_PUBLIC_URL}/${fileName}`;
+      } catch (error) {
+        console.error("Ошибка загрузки дефолтного файла в R2:", error);
+        throw new InternalServerErrorException(
+          "Failed to upload default employee photo."
+        );
+      }
     }
 
     return this.prisma.employee.create({
+      data: {
+        ...data,
+        photoUrl, // photoUrl будет null, если файл не был предоставлен
+      },
+    });
+  }
+
+  async updateEmployee(
+    id: number,
+    data: any,
+    file?: Express.Multer.File
+  ): Promise<Employee> {
+    const employee = await this.prisma.employee.findUnique({ where: { id } });
+    if (!employee) {
+      throw new NotFoundException(`Employee with ID ${id} not found.`);
+    }
+
+    let photoUrl = employee.photoUrl;
+
+    // Если пришёл новый файл — заменяем старый
+    if (file) {
+      // Удаляем старый файл
+      if (employee.photoUrl) {
+        const oldFileName = employee.photoUrl.substring(
+          employee.photoUrl.lastIndexOf("/") + 1
+        );
+        try {
+          await this.r2Client.send(
+            new DeleteObjectCommand({
+              Bucket: this.R2_BUCKET_NAME,
+              Key: oldFileName,
+            })
+          );
+        } catch (err) {
+          console.error("Ошибка удаления старого файла:", err);
+        }
+      }
+
+      // Загружаем новый файл
+      const newFileName = `${randomUUID()}-${file.originalname}`;
+      try {
+        await this.r2Client.send(
+          new PutObjectCommand({
+            Bucket: this.R2_BUCKET_NAME,
+            Key: newFileName,
+            Body: file.buffer,
+            ContentType: file.mimetype,
+          })
+        );
+        photoUrl = `${this.R2_PUBLIC_URL}/${newFileName}`;
+      } catch (error) {
+        console.error("Ошибка загрузки нового файла:", error);
+        throw new InternalServerErrorException(
+          "Failed to upload new employee photo."
+        );
+      }
+    }
+
+    // Обновляем данные сотрудника
+    return this.prisma.employee.update({
+      where: { id },
       data: {
         ...data,
         photoUrl,
@@ -124,9 +210,8 @@ export class EmployeeService {
     }
 
     return employee;
-  }
+  } // ОБНОВЛЁННЫЙ МЕТОД: удаляет и сотрудника, и его фото
 
-  // ОБНОВЛЁННЫЙ МЕТОД: удаляет и сотрудника, и его фото
   async deleteEmployee(id: number): Promise<Employee> {
     // 1. Сначала находим сотрудника по ID, чтобы получить URL его фотографии
     const employeeToDelete = await this.prisma.employee.findUnique({
@@ -135,9 +220,8 @@ export class EmployeeService {
 
     if (!employeeToDelete) {
       throw new NotFoundException(`Employee with ID ${id} not found.`);
-    }
+    } // 2. Если у сотрудника есть URL фотографии, пытаемся удалить файл
 
-    // 2. Если у сотрудника есть URL фотографии, пытаемся удалить файл
     const photoUrl = employeeToDelete.photoUrl;
     if (photoUrl) {
       // Извлекаем имя файла из URL-адреса
@@ -148,9 +232,8 @@ export class EmployeeService {
         const deleteCommand = new DeleteObjectCommand({
           Bucket: this.R2_BUCKET_NAME,
           Key: fileName,
-        });
+        }); // Отправляем команду R2 клиенту
 
-        // Отправляем команду R2 клиенту
         await this.r2Client.send(deleteCommand);
         console.log(`Файл ${fileName} успешно удален из бакета.`);
       } catch (error) {
@@ -162,9 +245,8 @@ export class EmployeeService {
           error
         );
       }
-    }
+    } // 3. Удаляем запись о сотруднике из базы данных
 
-    // 3. Удаляем запись о сотруднике из базы данных
     return this.prisma.employee.delete({
       where: { id },
     });
