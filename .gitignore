@@ -39,3 +39,4 @@ logs
 Thumbs.db
 
 src/data/tiles.mbtiles
+src/config/my-google-key.json
