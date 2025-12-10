@@ -457,6 +457,7 @@ export class ItemsService {
           prices,
           rooms,
           area,
+          article: item.article,
           firstImage: item.images?.[0]?.url || null,
           contacts: item.contacts,
           metros: item.metros.map((m) => m.name),
@@ -989,6 +990,7 @@ export class ItemsService {
     return this.prisma.item.findMany({
       select: {
         id: true,
+        article: true,
         crmId: true,
         title: true,
         titleEn: true,
