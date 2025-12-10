@@ -343,17 +343,17 @@ export class CrmService {
         const now = new Date();
         const hours = now.getHours() + 3;
 
-        const isNightTime = hours === 17 && oneParse;
+        const isNightTime = hours === 3 && oneParse;
         if (isNightTime) {
           console.log("Старт глобального парсера");
           await this.syncData(this.fullFeedUrl, true);
           console.log("✅ Полная синхронизация CRM завершена");
           oneParse = false;
-        } /*else {
+        } else {
           await this.syncData(this.dailyFeedUrl, false);
           console.log("Парсим каждую минуту", hours);
           if (hours !== 3) oneParse = true;
-        }*/
+        }
       } catch (e: any) {
         console.error("❌ Ошибка синхронизации CRM:", e.message);
       } finally {
@@ -384,7 +384,7 @@ export class CrmService {
       const dto = this.mapJsonItemToDto(raw);
 
       seenCrmIds.push(dto.id);
-      /*
+      
       const existing = await this.prisma.item.findUnique({
         where: { crmId: dto.id },
         select: { updatedAt: true },
@@ -398,7 +398,7 @@ export class CrmService {
         if (existingUpdatedAt === newUpdatedAt) {
           continue;
         }
-      }*/
+      }
       this.pushDto(dto);
       const filteredImages = dto.images.filter((url): url is string => !!url);
 
