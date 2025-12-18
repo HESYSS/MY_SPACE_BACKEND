@@ -1,7 +1,7 @@
 // src/offers/offer.service.ts
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { Offer, OfferStatus } from '@prisma/client';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
+import { Offer, OfferStatus } from "@prisma/client";
 
 @Injectable()
 export class OfferService {
@@ -14,11 +14,19 @@ export class OfferService {
    */
   async createOffer(data: {
     clientName: string;
-    reason: 'BUYING' | 'SELLING';
-    propertyType: 'RESIDENTIAL' | 'COMMERCIAL' | 'LAND';
+    reason: "BUYING" | "SELLING";
+    propertyType: "RESIDENTIAL" | "COMMERCIAL" | "LAND";
     phoneNumber: string;
+    propertyArticle?: string; // Добавляем сюда как необязательное поле
   }): Promise<Offer> {
-    return this.prisma.offer.create({ data });
+    return this.prisma.offer.create({
+      data: {
+        ...data,
+        // Если data.propertyArticle придет undefined, Prisma просто проигнорирует его,
+        // но лучше явно передать то, что пришло.
+        propertyArticle: data.propertyArticle ?? null,
+      },
+    });
   }
 
   /**
@@ -28,7 +36,7 @@ export class OfferService {
   async getAllOffers(): Promise<Offer[]> {
     return this.prisma.offer.findMany({
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
   }

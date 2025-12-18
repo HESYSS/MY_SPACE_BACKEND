@@ -1,6 +1,6 @@
 // src/offers/dto/create-offer.dto.ts
-import { IsNotEmpty, IsEnum, IsString } from 'class-validator';
-import { OfferReason, OfferPropertyType } from '@prisma/client';
+import { IsNotEmpty, IsEnum, IsString, IsOptional } from "class-validator";
+import { OfferReason, OfferPropertyType } from "@prisma/client";
 
 export class CreateOfferDto {
   @IsNotEmpty()
@@ -14,8 +14,13 @@ export class CreateOfferDto {
   @IsNotEmpty()
   @IsEnum(OfferPropertyType)
   propertyType!: OfferPropertyType;
-  
+
   @IsNotEmpty()
   @IsString()
   phoneNumber!: string;
+
+  // Новое поле
+  @IsOptional() // Разрешает отсутствие поля или null
+  @IsString()
+  propertyArticle?: string;
 }

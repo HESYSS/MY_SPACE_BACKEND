@@ -133,6 +133,7 @@ model Offer {
   reason      OfferReason
   propertyType OfferPropertyType
   phoneNumber String
+  propertyArticle String?
   createdAt   DateTime            @default(now())
   status      OfferStatus         @default(PENDING)
 }
