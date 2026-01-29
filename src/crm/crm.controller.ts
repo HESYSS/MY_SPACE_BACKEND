@@ -9,7 +9,7 @@ export class CrmController {
   async sync(@Query("type") type: "day" | "all" = "day") {
     const url =
       type === "all"
-        ? process.env.FULL_FEED_URL!"
+        ? process.env.FULL_FEED_URL!
         : process.env.DAILY_FEED_URL!;
 
     await this.crmService.syncData(url, type === "all");
