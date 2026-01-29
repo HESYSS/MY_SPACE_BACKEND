@@ -8,10 +8,8 @@ import { TranslateService } from "../translate/translate.service";
 
 @Injectable()
 export class CrmService {
-  private dailyFeedUrl =
-    "https://crm-myspace.realtsoft.net/feed/json?id=3&updates=day";
-  private fullFeedUrl =
-    "https://crm-myspace.realtsoft.net/feed/json?id=3&updates=all";
+  private dailyFeedUrl = process.env.DAILY_FEED_URL!;
+  private fullFeedUrl = process.env.FULL_FEED_URL!;
 
   private lastFullSync = 0;
 
