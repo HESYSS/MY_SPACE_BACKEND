@@ -9,8 +9,8 @@ export class CrmController {
   async sync(@Query("type") type: "day" | "all" = "day") {
     const url =
       type === "all"
-        ? "https://crm-myspace.realtsoft.net/feed/json?id=3&updates=all"
-        : "https://crm-myspace.realtsoft.net/feed/json?id=3&updates=day";
+        ? process.env.FULL_FEED_URL!"
+        : process.env.DAILY_FEED_URL!;
 
     await this.crmService.syncData(url, type === "all");
     return { message: `✅ Sync complete: ${type}` };
